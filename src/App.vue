@@ -5,6 +5,7 @@ import { parseTtml } from './composables/useTtmlParser'
 import FileUploader from './components/FileUploader.vue'
 import AudioPlayer from './components/AudioPlayer.vue'
 import LyricsDisplay from './components/LyricsDisplay.vue'
+import ChordSearch from './components/ChordSearch.vue'
 
 const lines = ref<LyricLine[]>([])
 const audioSrc = ref<string | null>(null)
@@ -39,6 +40,10 @@ function onSeekTo(ms: number) {
   playerRef.value?.seekTo(ms)
   currentTimeMs.value = ms
 }
+
+function onChordsMatched(annotatedLines: LyricLine[]) {
+  lines.value = annotatedLines
+}
 </script>
 
 <template>
@@ -59,6 +64,10 @@ function onSeekTo(ms: number) {
 
       <!-- Lyrics view -->
       <template v-else>
+        <ChordSearch
+          :lines="lines"
+          @chords-matched="onChordsMatched"
+        />
         <LyricsDisplay
           :lines="lines"
           :current-time-ms="currentTimeMs"

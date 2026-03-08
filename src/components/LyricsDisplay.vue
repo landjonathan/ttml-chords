@@ -73,6 +73,10 @@ function getWordProgress(word: { beginMs: number; endMs: number }): number {
   return ((props.currentTimeMs - word.beginMs) / duration) * 100
 }
 
+function hasChords(line: LyricLine): boolean {
+  return line.words.some((w) => !!w.chord)
+}
+
 function onLineClick(line: LyricLine) {
   emit('seekTo', line.beginMs)
 }
@@ -103,14 +107,31 @@ function setLineRef(el: unknown, index: number) {
             'word-active': isWordActive(word),
             'word-past': isWordPast(word),
             'word-upcoming': !isWordActive(word) && !isWordPast(word),
+            'word-has-chord': !!word.chord,
           }"
         >
+          <span v-if="word.chord" class="chord-label">{{ word.chord }}</span>
           <span class="word-fill" :style="{ width: getWordProgress(word) + '%' }"></span>
           <span class="word-text">{{ word.text }}</span>
         </span>
       </template>
 
-      <!-- Line-level display (non-active lines or lines without word timing) -->
+      <!-- Non-active lines with chords (show chords but no fill animation) -->
+      <template v-else-if="line.words.length > 0 && hasChords(line)">
+        <span
+          v-for="(word, wIdx) in line.words"
+          :key="wIdx"
+          class="word word-static"
+          :class="{
+            'word-has-chord': !!word.chord,
+          }"
+        >
+          <span v-if="word.chord" class="chord-label">{{ word.chord }}</span>
+          <span class="word-text">{{ word.text }}</span>
+        </span>
+      </template>
+
+      <!-- Line-level display (no word timing and no chords) -->
       <template v-else>
         {{ line.text }}
       </template>
@@ -242,6 +263,45 @@ function setLineRef(el: unknown, index: number) {
 
 .word-upcoming {
   color: rgba(255, 255, 255, 0.35);
+}
+
+.word-static {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.line.past .word-static {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Chord annotations */
+.word-has-chord {
+  position: relative;
+  padding-top: 1.3em;
+}
+
+.chord-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 0.6em;
+  font-weight: 700;
+  color: #5ac8fa;
+  white-space: nowrap;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+
+.word-active .chord-label {
+  color: #5ac8fa;
+}
+
+.word-past .chord-label {
+  color: rgba(90, 200, 250, 0.5);
+}
+
+.word-upcoming .chord-label,
+.word-static .chord-label {
+  color: rgba(90, 200, 250, 0.6);
 }
 
 /* Responsive */
