@@ -14,7 +14,7 @@ function generateDeviceId(): string {
 
 /**
  * Generate the X-UG-API-KEY header value.
- * Formula: md5(deviceId + "YYYY-MM-DD:HH" (UTC) + "createLog()")
+ * Formula: md5(deviceId + "YYYY-MM-DD:H" (UTC, non-padded hour) + "createLog()")
  */
 function generateApiKey(deviceId: string): string {
   const now = new Date()
@@ -27,26 +27,46 @@ function generateApiKey(deviceId: string): string {
   return createHash('md5').update(payload).digest('hex')
 }
 
-async function ugFetch(path: string): Promise<unknown> {
-  const deviceId = generateDeviceId()
-  const apiKey = generateApiKey(deviceId)
+async function ugFetch(path: string, retries = 2): Promise<unknown> {
+  let lastError: Error | undefined
 
-  const res = await fetch(`${UG_API}${path}`, {
-    headers: {
-      'User-Agent': UG_USER_AGENT,
-      Accept: 'application/json',
-      'Accept-Charset': 'utf-8',
-      'X-UG-CLIENT-ID': deviceId,
-      'X-UG-API-KEY': apiKey,
-      Connection: 'close',
-    },
-  })
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // Fresh credentials per attempt
+    const deviceId = generateDeviceId()
+    const apiKey = generateApiKey(deviceId)
 
-  if (!res.ok) {
-    throw new Error(`UG API error: ${res.status} ${res.statusText}`)
+    try {
+      const res = await fetch(`${UG_API}${path}`, {
+        headers: {
+          'User-Agent': UG_USER_AGENT,
+          Accept: 'application/json',
+          'Accept-Charset': 'utf-8',
+          'X-UG-CLIENT-ID': deviceId,
+          'X-UG-API-KEY': apiKey,
+          Connection: 'close',
+        },
+      })
+
+      if (res.ok) {
+        return res.json()
+      }
+
+      lastError = new Error(`UG API error: ${res.status} ${res.statusText}`)
+
+      // Only retry on server errors or unexpected client errors (not 400/401)
+      if (res.status < 500 && res.status !== 404 && res.status !== 498) {
+        throw lastError
+      }
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error('UG API request failed')
+    }
+
+    if (attempt < retries) {
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+    }
   }
 
-  return res.json()
+  throw lastError!
 }
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
