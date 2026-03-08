@@ -55,7 +55,7 @@ async function selectTab(tab: UgSearchResult) {
   isFetching.value = true
 
   try {
-    const res = await fetch(`/api/ug/tab?url=${encodeURIComponent(tab.url)}`)
+    const res = await fetch(`/api/ug/tab?id=${encodeURIComponent(tab.id)}`)
     const data = await res.json()
 
     if (!res.ok) {
