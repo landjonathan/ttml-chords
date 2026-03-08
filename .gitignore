@@ -1,1 +1,8 @@
 node_modules\ndist\n*.local
+.DS_Store
+tsconfig.tsbuildinfo
+dist
+node_modules
+
+# Local Netlify folder
+.netlify
