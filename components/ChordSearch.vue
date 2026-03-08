@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { UgSearchResult, LyricLine } from '../types'
-import { parseUgContent } from '../composables/useChordParser'
-import { matchChordsToTtml } from '../composables/useChordMatcher'
+import type { UgSearchResult, LyricLine } from '~/types'
+import { parseUgContent } from '~/composables/useChordParser'
+import { matchChordsToTtml } from '~/composables/useChordMatcher'
 
 const props = defineProps<{
   lines: LyricLine[]

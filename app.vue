@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { LyricLine } from './types'
-import { parseTtml } from './composables/useTtmlParser'
-import FileUploader from './components/FileUploader.vue'
-import AudioPlayer from './components/AudioPlayer.vue'
-import LyricsDisplay from './components/LyricsDisplay.vue'
-import ChordSearch from './components/ChordSearch.vue'
+import type { LyricLine } from '~/types'
+import { parseTtml } from '~/composables/useTtmlParser'
 
 const lines = ref<LyricLine[]>([])
 const audioSrc = ref<string | null>(null)

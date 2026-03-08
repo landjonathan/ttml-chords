@@ -1,5 +1,5 @@
-import type { LyricLine, UgChordLine } from '../types'
-import { mapChordsToWords } from './useChordParser'
+import type { LyricLine, UgChordLine } from '~/types'
+import { mapChordsToWords } from '~/composables/useChordParser'
 
 /**
  * Normalize text for comparison: lowercase, strip punctuation, collapse whitespace.

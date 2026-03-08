@@ -1,4 +1,4 @@
-import type { UgChordLine, UgChordPosition } from '../types'
+import type { UgChordLine, UgChordPosition } from '~/types'
 
 /**
  * Check if a line contains [ch]...[/ch] chord tags.

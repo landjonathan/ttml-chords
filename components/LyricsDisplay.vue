@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue'
-import type { LyricLine } from '../types'
-import { findActiveLineIndex } from '../composables/useTtmlParser'
+import type { LyricLine } from '~/types'
+import { findActiveLineIndex } from '~/composables/useTtmlParser'
 
 const props = defineProps<{
   lines: LyricLine[]

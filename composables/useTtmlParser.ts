@@ -1,4 +1,4 @@
-import type { LyricLine, LyricWord, ParsedTtml } from '../types'
+import type { LyricLine, LyricWord, ParsedTtml } from '~/types'
 
 /**
  * Parse a TTML time string to milliseconds.
