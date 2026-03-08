@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml"
+    xmlns:itunes="http://music.apple.com/lyric-ttml-internal"
+    xmlns:ttm="http://www.w3.org/ns/ttml#metadata"
+    itunes:timing="Word"
+    xml:lang="en">
+  <head>
+    <metadata>
+      <ttm:title>Sample Lyrics</ttm:title>
+    </metadata>
+  </head>
+  <body>
+    <div>
+      <!-- Verse 1 -->
+      <p begin="00:00:02.000" end="00:00:06.000">
+        <span begin="00:00:02.000" end="00:00:02.800">Walking</span>
+        <span begin="00:00:02.800" end="00:00:03.400">through</span>
+        <span begin="00:00:03.400" end="00:00:04.000">the</span>
+        <span begin="00:00:04.000" end="00:00:04.800">city</span>
+        <span begin="00:00:04.800" end="00:00:06.000">lights</span>
+      </p>
+      <p begin="00:00:06.500" end="00:00:10.500">
+        <span begin="00:00:06.500" end="00:00:07.300">Every</span>
+        <span begin="00:00:07.300" end="00:00:08.100">shadow</span>
+        <span begin="00:00:08.100" end="00:00:08.800">tells</span>
+        <span begin="00:00:08.800" end="00:00:09.300">a</span>
+        <span begin="00:00:09.300" end="00:00:10.500">story</span>
+      </p>
+      <p begin="00:00:11.000" end="00:00:15.000">
+        <span begin="00:00:11.000" end="00:00:11.800">Neon</span>
+        <span begin="00:00:11.800" end="00:00:12.600">signs</span>
+        <span begin="00:00:12.600" end="00:00:13.200">reflecting</span>
+        <span begin="00:00:13.200" end="00:00:14.000">in</span>
+        <span begin="00:00:14.000" end="00:00:15.000">puddles</span>
+      </p>
+      <p begin="00:00:15.500" end="00:00:19.500">
+        <span begin="00:00:15.500" end="00:00:16.300">Searching</span>
+        <span begin="00:00:16.300" end="00:00:17.100">for</span>
+        <span begin="00:00:17.100" end="00:00:17.800">a</span>
+        <span begin="00:00:17.800" end="00:00:18.600">place</span>
+        <span begin="00:00:18.600" end="00:00:19.500">to belong</span>
+      </p>
+
+      <!-- Chorus -->
+      <p begin="00:00:21.000" end="00:00:25.500">
+        <span begin="00:00:21.000" end="00:00:22.000">Light</span>
+        <span begin="00:00:22.000" end="00:00:23.000">up</span>
+        <span begin="00:00:23.000" end="00:00:23.800">the</span>
+        <span begin="00:00:23.800" end="00:00:25.500">night</span>
+      </p>
+      <p begin="00:00:25.500" end="00:00:30.000">
+        <span begin="00:00:25.500" end="00:00:26.500">We</span>
+        <span begin="00:00:26.500" end="00:00:27.500">are</span>
+        <span begin="00:00:27.500" end="00:00:28.500">the</span>
+        <span begin="00:00:28.500" end="00:00:30.000">dreamers</span>
+      </p>
+      <p begin="00:00:30.500" end="00:00:35.000">
+        <span begin="00:00:30.500" end="00:00:31.500">Dancing</span>
+        <span begin="00:00:31.500" end="00:00:32.500">under</span>
+        <span begin="00:00:32.500" end="00:00:33.500">the</span>
+        <span begin="00:00:33.500" end="00:00:35.000">stars</span>
+      </p>
+      <p begin="00:00:35.500" end="00:00:40.000">
+        <span begin="00:00:35.500" end="00:00:36.500">Nothing</span>
+        <span begin="00:00:36.500" end="00:00:37.500">can</span>
+        <span begin="00:00:37.500" end="00:00:38.500">stop</span>
+        <span begin="00:00:38.500" end="00:00:40.000">us now</span>
+      </p>
+
+      <!-- Verse 2 -->
+      <p begin="00:00:42.000" end="00:00:46.000">
+        <span begin="00:00:42.000" end="00:00:42.800">Whispers</span>
+        <span begin="00:00:42.800" end="00:00:43.600">carried</span>
+        <span begin="00:00:43.600" end="00:00:44.200">by</span>
+        <span begin="00:00:44.200" end="00:00:45.000">the</span>
+        <span begin="00:00:45.000" end="00:00:46.000">wind</span>
+      </p>
+      <p begin="00:00:46.500" end="00:00:50.500">
+        <span begin="00:00:46.500" end="00:00:47.300">Echoes</span>
+        <span begin="00:00:47.300" end="00:00:48.100">of</span>
+        <span begin="00:00:48.100" end="00:00:48.800">a</span>
+        <span begin="00:00:48.800" end="00:00:49.600">distant</span>
+        <span begin="00:00:49.600" end="00:00:50.500">melody</span>
+      </p>
+      <p begin="00:00:51.000" end="00:00:55.000">
+        <span begin="00:00:51.000" end="00:00:51.800">Hearts</span>
+        <span begin="00:00:51.800" end="00:00:52.600">beating</span>
+        <span begin="00:00:52.600" end="00:00:53.200">in</span>
+        <span begin="00:00:53.200" end="00:00:54.000">perfect</span>
+        <span begin="00:00:54.000" end="00:00:55.000">time</span>
+      </p>
+      <p begin="00:00:55.500" end="00:00:59.500">
+        <span begin="00:00:55.500" end="00:00:56.300">Finding</span>
+        <span begin="00:00:56.300" end="00:00:57.100">our</span>
+        <span begin="00:00:57.100" end="00:00:57.800">way</span>
+        <span begin="00:00:57.800" end="00:00:58.600">back</span>
+        <span begin="00:00:58.600" end="00:00:59.500">home</span>
+      </p>
+
+      <!-- Chorus repeat -->
+      <p begin="00:01:01.000" end="00:01:05.500">
+        <span begin="00:01:01.000" end="00:01:02.000">Light</span>
+        <span begin="00:01:02.000" end="00:01:03.000">up</span>
+        <span begin="00:01:03.000" end="00:01:03.800">the</span>
+        <span begin="00:01:03.800" end="00:01:05.500">night</span>
+      </p>
+      <p begin="00:01:05.500" end="00:01:10.000">
+        <span begin="00:01:05.500" end="00:01:06.500">We</span>
+        <span begin="00:01:06.500" end="00:01:07.500">are</span>
+        <span begin="00:01:07.500" end="00:01:08.500">the</span>
+        <span begin="00:01:08.500" end="00:01:10.000">dreamers</span>
+      </p>
+      <p begin="00:01:10.500" end="00:01:15.000">
+        <span begin="00:01:10.500" end="00:01:11.500">Dancing</span>
+        <span begin="00:01:11.500" end="00:01:12.500">under</span>
+        <span begin="00:01:12.500" end="00:01:13.500">the</span>
+        <span begin="00:01:13.500" end="00:01:15.000">stars</span>
+      </p>
+      <p begin="00:01:15.500" end="00:01:20.000">
+        <span begin="00:01:15.500" end="00:01:16.500">Nothing</span>
+        <span begin="00:01:16.500" end="00:01:17.500">can</span>
+        <span begin="00:01:17.500" end="00:01:18.500">stop</span>
+        <span begin="00:01:18.500" end="00:01:20.000">us now</span>
+      </p>
+
+      <!-- Bridge -->
+      <p begin="00:01:22.000" end="00:01:26.000">
+        <span begin="00:01:22.000" end="00:01:23.200">When</span>
+        <span begin="00:01:23.200" end="00:01:24.000">the</span>
+        <span begin="00:01:24.000" end="00:01:24.800">morning</span>
+        <span begin="00:01:24.800" end="00:01:26.000">comes</span>
+      </p>
+      <p begin="00:01:26.500" end="00:01:30.500">
+        <span begin="00:01:26.500" end="00:01:27.500">We will</span>
+        <span begin="00:01:27.500" end="00:01:28.500">still</span>
+        <span begin="00:01:28.500" end="00:01:29.500">be</span>
+        <span begin="00:01:29.500" end="00:01:30.500">here</span>
+      </p>
+      <p begin="00:01:31.000" end="00:01:35.000">
+        <span begin="00:01:31.000" end="00:01:32.000">Holding</span>
+        <span begin="00:01:32.000" end="00:01:33.000">on</span>
+        <span begin="00:01:33.000" end="00:01:34.000">to</span>
+        <span begin="00:01:34.000" end="00:01:35.000">forever</span>
+      </p>
+    </div>
+  </body>
+</tt>
