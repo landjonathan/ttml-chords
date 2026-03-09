@@ -67,7 +67,7 @@ function extractChords(chordLine: string): UgChordPosition[] {
  */
 export function parseUgContent(content: string): UgChordLine[] {
   // Strip [tab]/[/tab] wrappers
-  const cleaned = content.replace(/\[\/?(tab)\]/gi, '')
+  const cleaned = content.replace(/\[\/?tab\]/gi, '')
 
   const rawLines = cleaned.split('\n')
   const result: UgChordLine[] = []
