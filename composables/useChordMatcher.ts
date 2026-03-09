@@ -1,4 +1,4 @@
-import type { LyricLine, UgChordLine } from '~/types'
+import type { LyricLine, LyricWord, UgChordLine } from '~/types'
 import { mapChordsToWords } from '~/composables/useChordParser'
 
 /**
@@ -70,11 +70,19 @@ export function matchChordsToTtml(
   let ugSearchStart = 0
 
   return ttmlLines.map((ttmlLine) => {
-    if (ttmlLine.words.length === 0) return ttmlLine
-
     const ttmlText = ttmlLine.text
     const ttmlNormWords = toWords(ttmlText)
     if (ttmlNormWords.length === 0) return ttmlLine
+
+    // Synthesize word objects for lines without word-level timing (line-level TTML)
+    const effectiveWords: LyricWord[] =
+      ttmlLine.words.length > 0
+        ? ttmlLine.words
+        : ttmlText.split(/\s+/).filter(Boolean).map((text) => ({
+            text,
+            beginMs: ttmlLine.beginMs,
+            endMs: ttmlLine.endMs,
+          }))
 
     // Find best matching UG line, starting from ugSearchStart
     // but also check all UG lines for repeated sections
@@ -123,7 +131,7 @@ export function matchChordsToTtml(
     }
 
     // Two-pointer alignment: match TTML words to UG words
-    const newWords = ttmlLine.words.map((w) => ({ ...w }))
+    const newWords = effectiveWords.map((w) => ({ ...w }))
     let ugPtr = 0
 
     for (let t = 0; t < newWords.length; t++) {
