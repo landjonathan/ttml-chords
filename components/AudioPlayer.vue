@@ -5,6 +5,8 @@ const props = defineProps<{
   src: string | null
   /** If no audio file, allow manual time simulation */
   simulateMode?: boolean
+  /** Known duration in seconds (e.g. from parsed lyrics) */
+  durationHint?: number
 }>()
 
 const emit = defineEmits<{
@@ -128,12 +130,12 @@ function tickSimulation() {
   simRaf = requestAnimationFrame(tickSimulation)
 }
 
-// When switching to simulation mode, set a default duration
+// When switching to simulation mode, set duration from hint
 watch(
-  () => props.simulateMode,
-  (sim) => {
-    if (sim && duration.value === 0) {
-      duration.value = 120 // 2 min default for sample
+  [() => props.simulateMode, () => props.durationHint],
+  ([sim, hint]) => {
+    if (sim && !audioEl.value) {
+      duration.value = hint ?? 0
     }
   },
   { immediate: true }

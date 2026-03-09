@@ -12,6 +12,10 @@ const playerRef = ref<InstanceType<typeof AudioPlayer> | null>(null)
 
 const hasLyrics = computed(() => lines.value.length > 0)
 const simulateMode = computed(() => hasLyrics.value && !audioSrc.value)
+const lyricsDuration = computed(() => {
+  if (!lines.value.length) return 0
+  return Math.max(...lines.value.map(l => l.endMs)) / 1000
+})
 
 function onTtmlLoaded(content: string, _fileName: string) {
   try {
@@ -79,6 +83,7 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
         ref="playerRef"
         :src="audioSrc"
         :simulate-mode="simulateMode"
+        :duration-hint="lyricsDuration"
         @time-update="onTimeUpdate"
         @play="isPlaying = true"
         @pause="isPlaying = false"
