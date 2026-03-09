@@ -1,4 +1,4 @@
-import { ugFetch } from '~/server/utils/ugFetch'
+import { ugFetch, UgApiError } from '~/server/utils/ugFetch'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -21,8 +21,15 @@ export default defineEventHandler(async (event) => {
     return { content }
   } catch (e) {
     if ((e as any).statusCode) throw e
+
+    if (e instanceof UgApiError) {
+      console.error(`[ug-api] tab error: upstream ${e.status} for tab ${id}`)
+      const code = e.status === 404 ? 404 : 502
+      throw createError({ statusCode: code, statusMessage: e.message })
+    }
+
     const msg = e instanceof Error ? e.message : 'Tab fetch failed'
     console.error('[ug-api] tab error:', msg)
-    throw createError({ statusCode: 500, statusMessage: msg })
+    throw createError({ statusCode: 502, statusMessage: msg })
   }
 })
