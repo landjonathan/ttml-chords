@@ -18,6 +18,8 @@ export interface ParsedTtml {
   lines: LyricLine[]
   timing: 'Word' | 'Line' | 'None'
   lang: string
+  songName?: string
+  artistName?: string
 }
 
 // Ultimate Guitar types

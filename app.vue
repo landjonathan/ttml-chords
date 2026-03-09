@@ -9,6 +9,8 @@ const currentTimeMs = ref(0)
 const isPlaying = ref(false)
 const parseError = ref('')
 const playerRef = ref<InstanceType<typeof AudioPlayer> | null>(null)
+const initialSongName = ref('')
+const initialArtistName = ref('')
 
 const hasLyrics = computed(() => lines.value.length > 0)
 const simulateMode = computed(() => hasLyrics.value && !audioSrc.value)
@@ -22,6 +24,8 @@ function onTtmlLoaded(content: string, _fileName: string) {
     parseError.value = ''
     const result = parseTtml(content)
     lines.value = result.lines
+    initialSongName.value = result.songName || ''
+    initialArtistName.value = result.artistName || ''
   } catch (e) {
     parseError.value = e instanceof Error ? e.message : 'Failed to parse TTML'
     lines.value = []
@@ -66,6 +70,8 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
       <template v-else>
         <ChordSearch
           :lines="lines"
+          :initial-artist="initialArtistName"
+          :initial-song="initialSongName"
           @chords-matched="onChordsMatched"
         />
         <LyricsDisplay

@@ -129,7 +129,13 @@ export function parseTtml(xml: string): ParsedTtml {
     line.index = i
   })
 
-  return { lines, timing, lang }
+  // Extract metadata
+  const titleEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'title')[0]
+  const agentEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'agent')[0]
+  const songName = titleEl?.textContent?.trim() || undefined
+  const artistName = agentEl?.textContent?.trim() || agentEl?.getAttribute('xml:id')?.trim() || undefined
+
+  return { lines, timing, lang, songName, artistName }
 }
 
 /**

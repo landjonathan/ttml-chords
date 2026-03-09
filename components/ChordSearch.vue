@@ -6,14 +6,16 @@ import { matchChordsToTtml } from '~/composables/useChordMatcher'
 
 const props = defineProps<{
   lines: LyricLine[]
+  initialArtist?: string
+  initialSong?: string
 }>()
 
 const emit = defineEmits<{
   chordsMatched: [lines: LyricLine[]]
 }>()
 
-const artist = ref('')
-const song = ref('')
+const artist = ref(props.initialArtist || '')
+const song = ref(props.initialSong || '')
 const searchResults = ref<UgSearchResult[]>([])
 const isSearching = ref(false)
 const isFetching = ref(false)
