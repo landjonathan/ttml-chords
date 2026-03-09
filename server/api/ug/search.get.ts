@@ -24,7 +24,6 @@ export default defineEventHandler(async (event) => {
         votes: r.votes ?? 0,
         type: r.type || 'Chords',
       }))
-      .slice(0, 15)
 
     return { results: tabs }
   } catch (e) {
