@@ -1,4 +1,4 @@
-import { ugFetch } from '~/server/utils/ugFetch'
+import { ugFetch, UgApiError } from '~/server/utils/ugFetch'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -28,8 +28,16 @@ export default defineEventHandler(async (event) => {
 
     return { results: tabs }
   } catch (e) {
+    // A 404 after exhausting retries most likely means the upstream API is
+    // temporarily unreachable — return an empty result set so the UI can
+    // show "no results" instead of a hard error.
+    if (e instanceof UgApiError && e.status === 404) {
+      console.warn('[ug-api] search: upstream returned 404 after retries, returning empty results')
+      return { results: [] }
+    }
+
     const msg = e instanceof Error ? e.message : 'Search failed'
     console.error('[ug-api] search error:', msg)
-    throw createError({ statusCode: 500, statusMessage: msg })
+    throw createError({ statusCode: 502, statusMessage: msg })
   }
 })
