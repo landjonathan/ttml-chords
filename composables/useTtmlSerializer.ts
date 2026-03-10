@@ -19,57 +19,62 @@ const escapeXml = (str: string) =>
     .replace(/"/g, '&quot;')
 
 /**
- * Compute per-word timing for a line. If words already have distinct timing,
- * use it as-is. If all words share the same begin/end (line-level timing),
- * distribute the line's time range evenly across words so each gets a unique
- * and valid timestamp.
+ * Check whether words have real (distinct) per-word timing.
  */
-const resolveWordTimings = (line: LyricLine) => {
+const hasRealWordTiming = (line: LyricLine) => {
   const { words } = line
-  if (words.length === 0) return []
-
-  const allSame = words.every(
+  if (words.length <= 1) return true
+  return !words.every(
     (w) => w.beginMs === words[0].beginMs && w.endMs === words[0].endMs
   )
-  if (!allSame) return words.map((w) => ({ beginMs: w.beginMs, endMs: w.endMs }))
+}
 
-  // Distribute line range evenly
+/**
+ * For a line without real word timing, compute a distributed timestamp
+ * for the word at the given index. This is used only for chord spans
+ * to encode which word a chord belongs to.
+ */
+const distributedTime = (line: LyricLine, wordIndex: number) => {
   const duration = line.endMs - line.beginMs
-  const step = duration / words.length
-  return words.map((_, i) => ({
-    beginMs: Math.round(line.beginMs + i * step),
-    endMs: Math.round(line.beginMs + (i + 1) * step),
-  }))
+  const step = duration / line.words.length
+  return {
+    beginMs: Math.round(line.beginMs + wordIndex * step),
+    endMs: Math.round(line.beginMs + (wordIndex + 1) * step),
+  }
 }
 
 /**
  * Serialize a line's words into <span> elements.
+ * Only emits spans for word-timed lines; line-timed lines are handled as plain text.
  */
-const serializeWordSpans = (line: LyricLine) => {
-  const timings = resolveWordTimings(line)
-  return line.words
+const serializeWordSpans = (line: LyricLine) =>
+  line.words
     .map(
-      (w, i) =>
-        `        <span begin="${formatTime(timings[i].beginMs)}" end="${formatTime(timings[i].endMs)}">${escapeXml(w.text)}</span>`
+      (w) =>
+        `        <span begin="${formatTime(w.beginMs)}" end="${formatTime(w.endMs)}">${escapeXml(w.text)}</span>`
     )
     .join('\n')
-}
 
 /**
  * Build the chords <div> containing only lines that have chord annotations.
  * Each <p> mirrors the lyrics line timing; each <span> carries a chord name
  * timed to the word it annotates.
+ *
+ * For word-timed lines, chord spans use the word's real timing.
+ * For line-timed lines, chord spans get evenly distributed timing
+ * to encode their word position.
  */
 const buildChordsDiv = (lines: LyricLine[]) => {
   const chordPs: string[] = []
 
   for (const line of lines) {
-    const timings = resolveWordTimings(line)
+    const realTiming = hasRealWordTiming(line)
     const chordSpans: string[] = []
     line.words.forEach((w, i) => {
       if (!w.chord) return
+      const t = realTiming ? { beginMs: w.beginMs, endMs: w.endMs } : distributedTime(line, i)
       chordSpans.push(
-        `        <span begin="${formatTime(timings[i].beginMs)}" end="${formatTime(timings[i].endMs)}">${escapeXml(w.chord)}</span>`
+        `        <span begin="${formatTime(t.beginMs)}" end="${formatTime(t.endMs)}">${escapeXml(w.chord)}</span>`
       )
     })
     if (chordSpans.length === 0) continue
@@ -111,7 +116,7 @@ export const serializeTtml = (parsed: ParsedTtml, artistName?: string, songName?
     ]
     if (line.isBackground) attrs.push(`itunes:key="L2"`)
 
-    if (line.words.length > 0) {
+    if (line.words.length > 0 && hasRealWordTiming(line)) {
       return `      <p ${attrs.join(' ')}>\n${serializeWordSpans(line)}\n      </p>`
     }
     return `      <p ${attrs.join(' ')}>${escapeXml(line.text)}</p>`

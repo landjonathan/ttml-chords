@@ -57,22 +57,6 @@ function getLineClass(line: LyricLine, index: number): string {
   return 'line upcoming'
 }
 
-function isWordActive(word: { beginMs: number; endMs: number }): boolean {
-  return props.currentTimeMs >= word.beginMs && props.currentTimeMs < word.endMs
-}
-
-function isWordPast(word: { beginMs: number; endMs: number }): boolean {
-  return props.currentTimeMs >= word.endMs
-}
-
-function getWordProgress(word: { beginMs: number; endMs: number }): number {
-  if (props.currentTimeMs < word.beginMs) return 0
-  if (props.currentTimeMs >= word.endMs) return 100
-  const duration = word.endMs - word.beginMs
-  if (duration <= 0) return 100
-  return ((props.currentTimeMs - word.beginMs) / duration) * 100
-}
-
 function hasChords(line: LyricLine): boolean {
   return line.words.some((w) => !!w.chord)
 }
@@ -97,41 +81,20 @@ function setLineRef(el: unknown, index: number) {
       :class="getLineClass(line, index)"
       @click="onLineClick(line)"
     >
-      <!-- Word-level highlighting -->
-      <template v-if="line.words.length > 0 && index === activeLineIndex">
+      <!-- Line with chords -->
+      <template v-if="hasChords(line)">
         <span
           v-for="(word, wIdx) in line.words"
           :key="wIdx"
           class="word"
-          :class="{
-            'word-active': isWordActive(word),
-            'word-past': isWordPast(word),
-            'word-upcoming': !isWordActive(word) && !isWordPast(word),
-            'word-has-chord': !!word.chord,
-          }"
-        >
-          <span v-if="word.chord" class="chord-label">{{ word.chord }}</span>
-          <span class="word-fill" :style="{ width: getWordProgress(word) + '%' }"></span>
-          <span class="word-text">{{ word.text }}</span>
-        </span>
-      </template>
-
-      <!-- Non-active lines with chords (show chords but no fill animation) -->
-      <template v-else-if="line.words.length > 0 && hasChords(line)">
-        <span
-          v-for="(word, wIdx) in line.words"
-          :key="wIdx"
-          class="word word-static"
-          :class="{
-            'word-has-chord': !!word.chord,
-          }"
+          :class="{ 'word-has-chord': !!word.chord }"
         >
           <span v-if="word.chord" class="chord-label">{{ word.chord }}</span>
           <span class="word-text">{{ word.text }}</span>
         </span>
       </template>
 
-      <!-- Line-level display (no word timing and no chords) -->
+      <!-- Plain text -->
       <template v-else>
         {{ line.text }}
       </template>
@@ -219,58 +182,10 @@ function setLineRef(el: unknown, index: number) {
   font-style: italic;
 }
 
-/* Word-level highlighting */
+/* Words */
 .word {
-  position: relative;
   display: inline-block;
   margin-right: 0.25em;
-  color: rgba(255, 255, 255, 0.4);
-  transition: color 0.15s ease;
-}
-
-.word-text {
-  position: relative;
-  z-index: 1;
-}
-
-.word-fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  transition: width 0.05s linear;
-  z-index: 0;
-}
-
-.word-active {
-  color: rgba(255, 255, 255, 1);
-}
-
-.word-active .word-fill {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.word-past {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.word-past .word-fill {
-  width: 100% !important;
-  background: transparent;
-}
-
-.word-upcoming {
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.word-static {
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.line.past .word-static {
-  color: rgba(255, 255, 255, 0.3);
 }
 
 /* Chord annotations */
@@ -291,17 +206,8 @@ function setLineRef(el: unknown, index: number) {
   letter-spacing: 0.02em;
 }
 
-.word-active .chord-label {
-  color: #5ac8fa;
-}
-
-.word-past .chord-label {
+.line.past .chord-label {
   color: rgba(90, 200, 250, 0.5);
-}
-
-.word-upcoming .chord-label,
-.word-static .chord-label {
-  color: rgba(90, 200, 250, 0.6);
 }
 
 /* Responsive */

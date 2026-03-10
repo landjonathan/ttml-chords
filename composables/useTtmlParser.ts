@@ -86,28 +86,53 @@ function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
 
   if (chordsByLine.size === 0) return false
 
-  // Match chords to lyrics words by timing, each word used at most once
+  // Match chords to lyrics words
   for (const line of lines) {
     const chords = chordsByLine.get(line.beginMs)
-    if (!chords || line.words.length === 0) continue
+    if (!chords) continue
 
-    const used = new Set<number>()
-    for (const { beginMs, endMs, chord } of chords) {
-      let bestIdx = -1
-      let bestDist = Infinity
-      for (let i = 0; i < line.words.length; i++) {
-        if (used.has(i)) continue
-        const dist = Math.abs(line.words[i].beginMs - beginMs) + Math.abs(line.words[i].endMs - endMs)
-        if (dist < bestDist) {
-          bestDist = dist
-          bestIdx = i
+    // If the line has word-level timing, match by timestamp
+    if (line.words.length > 0) {
+      const used = new Set<number>()
+      for (const { beginMs, endMs, chord } of chords) {
+        let bestIdx = -1
+        let bestDist = Infinity
+        for (let i = 0; i < line.words.length; i++) {
+          if (used.has(i)) continue
+          const dist = Math.abs(line.words[i].beginMs - beginMs) + Math.abs(line.words[i].endMs - endMs)
+          if (dist < bestDist) {
+            bestDist = dist
+            bestIdx = i
+          }
+        }
+        if (bestIdx >= 0) {
+          line.words[bestIdx].chord = chord
+          used.add(bestIdx)
         }
       }
-      if (bestIdx >= 0) {
-        line.words[bestIdx].chord = chord
-        used.add(bestIdx)
-      }
+      continue
     }
+
+    // Line has no word-level timing — synthesize words from text,
+    // derive word index from chord position within line time range
+    const textWords = line.text.split(/\s+/).filter(Boolean)
+    if (textWords.length === 0) continue
+
+    const duration = line.endMs - line.beginMs
+    const words: LyricWord[] = textWords.map((text) => ({
+      text,
+      beginMs: line.beginMs,
+      endMs: line.endMs,
+    }))
+
+    for (const { beginMs, chord } of chords) {
+      // Reverse the distribution: wordIndex = position within line range
+      const fraction = duration > 0 ? (beginMs - line.beginMs) / duration : 0
+      const idx = Math.min(Math.floor(fraction * textWords.length), textWords.length - 1)
+      words[idx].chord = chord
+    }
+
+    line.words = words
   }
 
   return true
