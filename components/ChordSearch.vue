@@ -11,7 +11,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  chordsMatched: [lines: LyricLine[]]
+  chordsMatched: [lines: LyricLine[], artist: string, song: string]
 }>()
 
 const artist = ref(props.initialArtist || '')
@@ -72,7 +72,12 @@ async function selectTab(tab: UgSearchResult) {
 
     const annotatedLines = matchChordsToTtml(props.lines, ugLines)
     matchedTabName.value = `${tab.artist_name} – ${tab.song_name}`
-    emit('chordsMatched', annotatedLines)
+    // Use tab metadata if user fields are empty, otherwise keep user input
+    const finalArtist = artist.value.trim() || tab.artist_name
+    const finalSong = song.value.trim() || tab.song_name
+    artist.value = finalArtist
+    song.value = finalSong
+    emit('chordsMatched', annotatedLines, finalArtist, finalSong)
     searchResults.value = []
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to fetch chords'

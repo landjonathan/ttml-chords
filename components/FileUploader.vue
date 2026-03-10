@@ -38,12 +38,6 @@ function processFiles(files: FileList) {
   }
 }
 
-async function loadSample() {
-  const res = await fetch('/sample.ttml')
-  const text = await res.text()
-  ttmlFileName.value = 'sample.ttml'
-  emit('ttmlLoaded', text, 'sample.ttml')
-}
 </script>
 
 <template>
@@ -84,9 +78,6 @@ async function loadSample() {
       </div>
     </div>
 
-    <button class="sample-btn" @click="loadSample">
-      Load sample lyrics
-    </button>
   </div>
 </template>
 
@@ -178,19 +169,4 @@ async function loadSample() {
   background: #30d158;
 }
 
-.sample-btn {
-  padding: 8px 20px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.sample-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
-}
 </style>

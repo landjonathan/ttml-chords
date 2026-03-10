@@ -53,6 +53,66 @@ function getTextContent(el: Element): string {
   return text.trim()
 }
 
+/**
+ * Look for a <div ttm:agent="chords"> section and apply chord annotations
+ * to the matching lyrics words by timing.
+ */
+function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
+  const divs = Array.from(doc.getElementsByTagNameNS('*', 'div'))
+  const chordsDiv = divs.find(
+    (d) =>
+      d.getAttribute('ttm:agent') === 'chords' ||
+      d.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'agent') === 'chords'
+  )
+  if (!chordsDiv) return false
+
+  const chordPs = Array.from(chordsDiv.getElementsByTagNameNS('*', 'p'))
+  if (chordPs.length === 0) return false
+
+  // Build a lookup: lineBeginMs -> chord spans (in document order)
+  const chordsByLine = new Map<number, { beginMs: number; endMs: number; chord: string }[]>()
+  for (const p of chordPs) {
+    const lineBegin = parseTime(p.getAttribute('begin'))
+    const spans = Array.from(p.getElementsByTagNameNS('*', 'span'))
+    const chords = spans
+      .map((s) => ({
+        beginMs: parseTime(s.getAttribute('begin')),
+        endMs: parseTime(s.getAttribute('end')),
+        chord: s.textContent?.trim() || '',
+      }))
+      .filter((c) => c.chord)
+    if (chords.length > 0) chordsByLine.set(lineBegin, chords)
+  }
+
+  if (chordsByLine.size === 0) return false
+
+  // Match chords to lyrics words by timing, each word used at most once
+  for (const line of lines) {
+    const chords = chordsByLine.get(line.beginMs)
+    if (!chords || line.words.length === 0) continue
+
+    const used = new Set<number>()
+    for (const { beginMs, endMs, chord } of chords) {
+      let bestIdx = -1
+      let bestDist = Infinity
+      for (let i = 0; i < line.words.length; i++) {
+        if (used.has(i)) continue
+        const dist = Math.abs(line.words[i].beginMs - beginMs) + Math.abs(line.words[i].endMs - endMs)
+        if (dist < bestDist) {
+          bestDist = dist
+          bestIdx = i
+        }
+      }
+      if (bestIdx >= 0) {
+        line.words[bestIdx].chord = chord
+        used.add(bestIdx)
+      }
+    }
+  }
+
+  return true
+}
+
 export function parseTtml(xml: string): ParsedTtml {
   const parser = new DOMParser()
   const doc = parser.parseFromString(xml, 'application/xml')
@@ -75,8 +135,16 @@ export function parseTtml(xml: string): ParsedTtml {
   const lang =
     tt.getAttribute('xml:lang') || tt.getAttribute('lang') || 'en'
 
-  // Find all <p> elements (lyrics lines) in <body>
-  const pElements = Array.from(doc.getElementsByTagNameNS('*', 'p'))
+  // Find all <p> elements (lyrics lines) in <body>, excluding chords agent div
+  const allPs = Array.from(doc.getElementsByTagNameNS('*', 'p'))
+  const pElements = allPs.filter((p) => {
+    const parentDiv = p.closest('div')
+    if (!parentDiv) return true
+    return (
+      parentDiv.getAttribute('ttm:agent') !== 'chords' &&
+      parentDiv.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'agent') !== 'chords'
+    )
+  })
 
   const lines: LyricLine[] = []
 
@@ -131,11 +199,15 @@ export function parseTtml(xml: string): ParsedTtml {
 
   // Extract metadata
   const titleEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'title')[0]
+  const descEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'desc')[0]
   const agentEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'agent')[0]
   const songName = titleEl?.textContent?.trim() || undefined
-  const artistName = agentEl?.textContent?.trim() || agentEl?.getAttribute('xml:id')?.trim() || undefined
+  const artistName = descEl?.textContent?.trim() || agentEl?.textContent?.trim() || agentEl?.getAttribute('xml:id')?.trim() || undefined
 
-  return { lines, timing, lang, songName, artistName }
+  // Extract chords from agent div
+  const hasChords = applyChordsFromAgent(doc, lines)
+
+  return { lines, timing, lang, songName, artistName, hasChords }
 }
 
 /**

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { LyricLine } from '~/types'
+import type { LyricLine, ParsedTtml } from '~/types'
 import { parseTtml } from '~/composables/useTtmlParser'
+import { serializeTtml } from '~/composables/useTtmlSerializer'
 
 const lines = ref<LyricLine[]>([])
 const audioSrc = ref<string | null>(null)
@@ -9,27 +10,50 @@ const currentTimeMs = ref(0)
 const isPlaying = ref(false)
 const parseError = ref('')
 const playerRef = ref<InstanceType<typeof AudioPlayer> | null>(null)
-const initialSongName = ref('')
-const initialArtistName = ref('')
+const songName = ref('')
+const artistName = ref('')
+const hasEmbeddedChords = ref(false)
+const showLibrary = ref(false)
+const libraryRef = ref<{ loadSongs: () => void } | null>(null)
+
+// Save state
+const isSaving = ref(false)
+const saveMessage = ref('')
+const saveMessageType = ref<'success' | 'warning' | 'error'>('success')
+
+// Preserve parsed metadata for serialization
+const parsedTtml = ref<ParsedTtml | null>(null)
 
 const hasLyrics = computed(() => lines.value.length > 0)
+const hasChords = computed(() => lines.value.some((l) => l.words.some((w) => w.chord)))
 const simulateMode = computed(() => hasLyrics.value && !audioSrc.value)
 const lyricsDuration = computed(() => {
   if (!lines.value.length) return 0
   return Math.max(...lines.value.map(l => l.endMs)) / 1000
 })
 
-function onTtmlLoaded(content: string, _fileName: string) {
+function loadTtml(content: string) {
+  parseError.value = ''
   try {
-    parseError.value = ''
     const result = parseTtml(content)
     lines.value = result.lines
-    initialSongName.value = result.songName || ''
-    initialArtistName.value = result.artistName || ''
+    songName.value = result.songName || ''
+    artistName.value = result.artistName || ''
+    hasEmbeddedChords.value = result.hasChords
+    parsedTtml.value = result
+    showLibrary.value = false
   } catch (e) {
     parseError.value = e instanceof Error ? e.message : 'Failed to parse TTML'
     lines.value = []
   }
+}
+
+function onTtmlLoaded(content: string, _fileName: string) {
+  loadTtml(content)
+}
+
+function onSongSelected(ttml: string, _filename: string) {
+  loadTtml(ttml)
 }
 
 function onAudioLoaded(url: string, _fileName: string) {
@@ -45,21 +69,101 @@ function onSeekTo(ms: number) {
   currentTimeMs.value = ms
 }
 
-function onChordsMatched(annotatedLines: LyricLine[]) {
+function onChordsMatched(annotatedLines: LyricLine[], artist: string, song: string) {
   lines.value = annotatedLines
+  if (artist) artistName.value = artist
+  if (song) songName.value = song
+}
+
+function resetSong() {
+  lines.value = []
+  audioSrc.value = null
+  currentTimeMs.value = 0
+  songName.value = ''
+  artistName.value = ''
+  hasEmbeddedChords.value = false
+  parsedTtml.value = null
+  saveMessage.value = ''
+  showLibrary.value = false
+}
+
+async function saveSong() {
+  if (!parsedTtml.value || !hasChords.value) return
+  if (!artistName.value.trim() || !songName.value.trim()) {
+    saveMessage.value = 'Artist and song name are required to save'
+    saveMessageType.value = 'error'
+    return
+  }
+
+  isSaving.value = true
+  saveMessage.value = ''
+
+  try {
+    // Re-serialize with current lines (which have chord annotations)
+    const ttmlWithChords = serializeTtml(
+      { ...parsedTtml.value, lines: lines.value },
+      artistName.value,
+      songName.value
+    )
+
+    const res = await fetch('/api/songs/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ttml: ttmlWithChords,
+        artist: artistName.value.trim(),
+        song: songName.value.trim(),
+      }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.statusMessage || 'Save failed')
+
+    if (data.overwritten) {
+      saveMessage.value = 'Saved (overwrote existing file)'
+      saveMessageType.value = 'warning'
+    } else {
+      saveMessage.value = 'Saved'
+      saveMessageType.value = 'success'
+    }
+
+    hasEmbeddedChords.value = true
+    libraryRef.value?.loadSongs()
+  } catch (e) {
+    saveMessage.value = e instanceof Error ? e.message : 'Save failed'
+    saveMessageType.value = 'error'
+  } finally {
+    isSaving.value = false
+  }
 }
 </script>
 
 <template>
   <div class="app">
     <header class="app-header">
-      <h1>TTML Lyrics</h1>
+      <h1>TTML Chords</h1>
+      <button v-if="hasLyrics" class="library-toggle" @click="showLibrary = !showLibrary">
+        {{ showLibrary ? 'Close' : 'Library' }}
+      </button>
     </header>
 
     <main class="app-main">
-      <!-- Upload view -->
-      <div v-if="!hasLyrics" class="upload-view">
-        <FileUploader
+      <!-- Library overlay when toggled from header -->
+      <div v-if="hasLyrics && showLibrary" class="library-overlay" @click.self="showLibrary = false">
+        <SongLibrary
+          ref="libraryRef"
+          menu-mode
+          @song-selected="onSongSelected"
+          @ttml-loaded="onTtmlLoaded"
+          @audio-loaded="onAudioLoaded"
+        />
+      </div>
+
+      <!-- Library view (no song loaded) -->
+      <div v-if="!hasLyrics" class="library-view">
+        <SongLibrary
+          ref="libraryRef"
+          @song-selected="onSongSelected"
           @ttml-loaded="onTtmlLoaded"
           @audio-loaded="onAudioLoaded"
         />
@@ -67,11 +171,12 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
       </div>
 
       <!-- Lyrics view -->
-      <template v-else>
+      <template v-if="hasLyrics">
         <ChordSearch
+          v-if="!hasEmbeddedChords"
           :lines="lines"
-          :initial-artist="initialArtistName"
-          :initial-song="initialSongName"
+          :initial-artist="artistName"
+          :initial-song="songName"
           @chords-matched="onChordsMatched"
         />
         <LyricsDisplay
@@ -95,9 +200,26 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
         @pause="isPlaying = false"
       />
 
-      <button class="reset-btn" @click="lines = []; audioSrc = null; currentTimeMs = 0">
-        Load different file
-      </button>
+      <div class="footer-actions">
+        <button
+          v-if="hasChords && !isSaving"
+          class="save-btn"
+          @click="saveSong"
+        >
+          Save
+        </button>
+        <span v-if="isSaving" class="save-status">Saving…</span>
+        <span
+          v-if="saveMessage"
+          class="save-status"
+          :class="'save-' + saveMessageType"
+        >
+          {{ saveMessage }}
+        </span>
+        <button class="reset-btn" @click="resetSong">
+          Load different file
+        </button>
+      </div>
     </footer>
   </div>
 </template>
@@ -114,6 +236,7 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
   flex-shrink: 0;
   padding: 16px 24px;
   text-align: center;
+  position: relative;
 }
 
 .app-header h1 {
@@ -125,21 +248,55 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
   margin: 0;
 }
 
+.library-toggle {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.library-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .app-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  position: relative;
 }
 
-.upload-view {
+.library-view {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+.library-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 40px;
 }
 
 .error {
@@ -157,6 +314,45 @@ function onChordsMatched(annotatedLines: LyricLine[]) {
   gap: 8px;
   padding: 12px 24px 24px;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.save-btn {
+  padding: 6px 18px;
+  background: rgba(90, 200, 250, 0.15);
+  border: 1px solid rgba(90, 200, 250, 0.3);
+  border-radius: 8px;
+  color: #5ac8fa;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.save-btn:hover {
+  background: rgba(90, 200, 250, 0.25);
+}
+
+.save-status {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.save-success {
+  color: #30d158;
+}
+
+.save-warning {
+  color: #ffd60a;
+}
+
+.save-error {
+  color: #ff453a;
 }
 
 .reset-btn {
