@@ -207,14 +207,42 @@ async function saveSong() {
     </div>
 
     <header class="app-header">
-      <template v-if="hasLyrics && (songName || artistName)">
-        <h1 class="song-title">{{ songName }}</h1>
-        <p v-if="artistName" class="song-artist">{{ artistName }}</p>
-      </template>
-      <h1 v-else>TTML Chords</h1>
-      <button v-if="hasLyrics" class="library-toggle" @click="showLibrary = !showLibrary">
-        {{ showLibrary ? 'Close' : 'Library' }}
+      <button v-if="hasLyrics" class="header-btn header-left" @click="showLibrary = !showLibrary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
       </button>
+
+      <div class="header-center">
+        <template v-if="hasLyrics && (songName || artistName)">
+          <h1 class="song-title">{{ songName }}</h1>
+          <p v-if="artistName" class="song-artist">{{ artistName }}</p>
+        </template>
+        <h1 v-else>TTML Chords</h1>
+      </div>
+
+      <div v-if="hasChords" class="header-right">
+        <button
+          class="header-btn reset-btn"
+          :disabled="!isDirty || !savedSnapshot"
+          @click="revertChanges"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
+        </button>
+        <button
+          class="header-btn save-btn"
+          :class="{ 'save-dirty': isDirty }"
+          :disabled="!isDirty"
+          @click="saveSong"
+        >
+          Save
+        </button>
+      </div>
     </header>
 
     <main class="app-main">
@@ -271,24 +299,6 @@ async function saveSong() {
         @pause="isPlaying = false"
       />
 
-      <div class="footer-actions">
-        <button
-          v-if="hasChords && !isSaving"
-          class="save-btn"
-          :class="{ 'save-dirty': isDirty }"
-          @click="saveSong"
-        >
-{{ isDirty ? 'Save' : 'Saved' }}
-        </button>
-        <button
-          v-if="isDirty && savedSnapshot && !isSaving"
-          class="reset-btn"
-          @click="revertChanges"
-        >
-          Reset
-        </button>
-        <span v-if="isSaving" class="save-status">Saving…</span>
-      </div>
     </footer>
   </div>
 </template>
@@ -315,9 +325,12 @@ async function saveSong() {
 
 .app-header {
   flex-shrink: 0;
-  padding: 16px 24px;
-  text-align: center;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
+  gap: 12px;
 }
 
 .app-header h1 {
@@ -327,6 +340,48 @@ async function saveSong() {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   margin: 0;
+}
+
+.header-center {
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+}
+
+.header-left {
+  flex-shrink: 0;
+}
+
+.header-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.header-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 .song-title {
@@ -342,27 +397,6 @@ async function saveSong() {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.35);
   margin: 2px 0 0;
-}
-
-.library-toggle {
-  position: absolute;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 6px 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.library-toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
 }
 
 .app-main {
@@ -412,53 +446,15 @@ async function saveSong() {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
 }
 
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .save-btn {
-  padding: 6px 18px;
   background: rgba(90, 200, 250, 0.15);
-  border: 1px solid rgba(90, 200, 250, 0.3);
-  border-radius: 8px;
+  border-color: rgba(90, 200, 250, 0.3);
   color: #5ac8fa;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.save-btn:hover {
-  background: rgba(90, 200, 250, 0.25);
-}
-
-.save-btn:not(.save-dirty) {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.reset-btn {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 12px;
-  font-family: inherit;
   padding: 6px 14px;
-  cursor: pointer;
-  transition: all 0.2s;
 }
 
-.reset-btn:hover {
-  color: rgba(255, 255, 255, 0.7);
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.save-status {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+.save-btn:hover:not(:disabled) {
+  background: rgba(90, 200, 250, 0.25);
 }
 
 
