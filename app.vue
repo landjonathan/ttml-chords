@@ -11,6 +11,7 @@ const isPlaying = ref(false)
 const parseError = ref('')
 const playerRef = ref<InstanceType<typeof AudioPlayer> | null>(null)
 const playbackRate = ref(1)
+const transposition = ref(0)
 const songName = ref('')
 const artistName = ref('')
 const hasEmbeddedChords = ref(false)
@@ -40,6 +41,7 @@ const currentSnapshot = computed(() =>
   JSON.stringify({
     chords: lines.value.map(l => l.words.map(w => w.chord || '')),
     rate: playbackRate.value,
+    transposition: transposition.value,
   })
 )
 
@@ -69,6 +71,7 @@ function loadTtml(content: string) {
     } else {
       playbackRate.value = 1
     }
+    transposition.value = result.transposition ?? 0
     savedSnapshot.value = result.hasChords ? currentSnapshot.value : null
     showLibrary.value = false
   } catch (e) {
@@ -115,9 +118,13 @@ function resetSong() {
   showLibrary.value = false
 }
 
+function transposeAll(halfSteps: number) {
+  transposition.value = Math.max(-12, Math.min(12, transposition.value + halfSteps))
+}
+
 function revertChanges() {
   if (!savedSnapshot.value) return
-  const { chords, rate } = JSON.parse(savedSnapshot.value)
+  const { chords, rate, transposition: savedTrans } = JSON.parse(savedSnapshot.value)
   lines.value.forEach((line, i) => {
     line.words.forEach((word, j) => {
       word.chord = chords[i]?.[j] || undefined
@@ -125,6 +132,7 @@ function revertChanges() {
   })
   playbackRate.value = rate
   playerRef.value?.setRate(rate)
+  transposition.value = savedTrans ?? 0
 }
 
 async function saveSong() {
@@ -143,7 +151,8 @@ async function saveSong() {
       { ...parsedTtml.value, lines: lines.value },
       artistName.value,
       songName.value,
-      playbackRate.value
+      playbackRate.value,
+      transposition.value
     )
 
     const res = await fetch('/api/songs/save', {
@@ -178,7 +187,12 @@ async function saveSong() {
       :style="{ transform: `scaleX(${lineProgress / 100})`, transitionDuration: lineProgress < 3 ? '0s' : '0.15s' }"
     />
 
-    <div v-if="hasLyrics" class="rate-slider">
+    <div v-if="hasLyrics" class="right-sidebar">
+      <div v-if="hasChords" class="transpose-controls">
+        <button class="transpose-btn" @click="transposeAll(1)">+</button>
+        <span class="transpose-label">{{ transposition === 0 ? '0' : (transposition > 0 ? '+' : '') + transposition }}</span>
+        <button class="transpose-btn" @click="transposeAll(-1)">-</button>
+      </div>
       <span class="rate-label">{{ playbackRate.toFixed(2) }}x</span>
       <input
         type="range"
@@ -239,6 +253,7 @@ async function saveSong() {
           :lines="lines"
           :current-time-ms="currentTimeMs"
           :is-playing="isPlaying"
+          :transposition="transposition"
           @seek-to="onSeekTo"
         />
       </template>
@@ -448,7 +463,7 @@ async function saveSong() {
 
 
 
-.rate-slider {
+.right-sidebar {
   position: fixed;
   right: 0;
   top: 0;
@@ -458,8 +473,43 @@ async function saveSong() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 12px;
   z-index: 5;
+}
+
+.transpose-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.transpose-btn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.transpose-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.transpose-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
 }
 
 .rate-input {

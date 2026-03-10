@@ -11,6 +11,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "chord-magic": "^2.1.1",
     "nuxt": "^3.16.0",
     "vue": "^3.5.13"
   },

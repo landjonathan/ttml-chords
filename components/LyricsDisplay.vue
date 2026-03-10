@@ -2,11 +2,13 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import type { LyricLine } from '~/types'
 import { findActiveLineIndex } from '~/composables/useTtmlParser'
+import { parse as parseChord, transpose as transposeChord, prettyPrint } from 'chord-magic'
 
 const props = defineProps<{
   lines: LyricLine[]
   currentTimeMs: number
   isPlaying: boolean
+  transposition: number
 }>()
 
 const emit = defineEmits<{
@@ -61,6 +63,13 @@ function hasChords(line: LyricLine): boolean {
   return line.words.some((w) => !!w.chord)
 }
 
+const displayChord = (chord: string) => {
+  if (!props.transposition) return chord
+  const parsed = parseChord(chord)
+  if (!parsed) return chord
+  return prettyPrint(transposeChord(parsed, props.transposition))
+}
+
 function onLineClick(line: LyricLine) {
   emit('seekTo', line.beginMs)
 }
@@ -89,7 +98,7 @@ function setLineRef(el: unknown, index: number) {
           class="word"
           :class="{ 'word-has-chord': !!word.chord }"
         >
-          <span v-if="word.chord" class="chord-label">{{ word.chord }}</span>
+          <span v-if="word.chord" class="chord-label">{{ displayChord(word.chord) }}</span>
           <span class="word-text">{{ word.text }}</span>
         </span>
       </template>

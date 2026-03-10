@@ -232,18 +232,18 @@ export function parseTtml(xml: string): ParsedTtml {
   // Extract playback rate from <ttm:item name="playbackRate">
   const itemEls = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'item')
   let playbackRate: number | undefined
+  let transposition: number | undefined
   for (const item of Array.from(itemEls)) {
-    if (item.getAttribute('name') === 'playbackRate') {
-      const val = parseFloat(item.textContent?.trim() || '')
-      if (!isNaN(val) && val > 0) playbackRate = val
-      break
-    }
+    const name = item.getAttribute('name')
+    const val = parseFloat(item.textContent?.trim() || '')
+    if (name === 'playbackRate' && !isNaN(val) && val > 0) playbackRate = val
+    if (name === 'transposition' && !isNaN(val)) transposition = val
   }
 
   // Extract chords from agent div
   const hasChords = applyChordsFromAgent(doc, lines)
 
-  return { lines, timing, lang, songName, artistName, hasChords, playbackRate }
+  return { lines, timing, lang, songName, artistName, hasChords, playbackRate, transposition }
 }
 
 /**
