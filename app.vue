@@ -19,8 +19,7 @@ const libraryRef = ref<{ loadSongs: () => void } | null>(null)
 
 // Save state
 const isSaving = ref(false)
-const saveMessage = ref('')
-const saveMessageType = ref<'success' | 'warning' | 'error'>('success')
+const savedSnapshot = ref<string | null>(null)
 
 // Preserve parsed metadata for serialization
 const parsedTtml = ref<ParsedTtml | null>(null)
@@ -36,6 +35,19 @@ const lineProgress = computed(() => {
   return Math.min(100, Math.max(0, ((currentTimeMs.value - line.beginMs) / duration) * 100))
 })
 const hasChords = computed(() => lines.value.some((l) => l.words.some((w) => w.chord)))
+
+const currentSnapshot = computed(() =>
+  JSON.stringify({
+    chords: lines.value.map(l => l.words.map(w => w.chord || '')),
+    rate: playbackRate.value,
+  })
+)
+
+const isDirty = computed(() => {
+  if (!hasChords.value) return false
+  if (savedSnapshot.value === null) return true
+  return currentSnapshot.value !== savedSnapshot.value
+})
 const simulateMode = computed(() => hasLyrics.value && !audioSrc.value)
 const lyricsDuration = computed(() => {
   if (!lines.value.length) return 0
@@ -54,7 +66,10 @@ function loadTtml(content: string) {
     if (result.playbackRate) {
       playbackRate.value = result.playbackRate
       playerRef.value?.setRate(result.playbackRate)
+    } else {
+      playbackRate.value = 1
     }
+    savedSnapshot.value = result.hasChords ? currentSnapshot.value : null
     showLibrary.value = false
   } catch (e) {
     parseError.value = e instanceof Error ? e.message : 'Failed to parse TTML'
@@ -97,7 +112,6 @@ function resetSong() {
   artistName.value = ''
   hasEmbeddedChords.value = false
   parsedTtml.value = null
-  saveMessage.value = ''
   showLibrary.value = false
 }
 
@@ -110,7 +124,6 @@ async function saveSong() {
   }
 
   isSaving.value = true
-  saveMessage.value = ''
 
   try {
     // Re-serialize with current lines (which have chord annotations)
@@ -134,19 +147,11 @@ async function saveSong() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.statusMessage || 'Save failed')
 
-    if (data.overwritten) {
-      saveMessage.value = 'Saved (overwrote existing file)'
-      saveMessageType.value = 'warning'
-    } else {
-      saveMessage.value = 'Saved'
-      saveMessageType.value = 'success'
-    }
-
     hasEmbeddedChords.value = true
+    savedSnapshot.value = currentSnapshot.value
     libraryRef.value?.loadSongs()
-  } catch (e) {
-    saveMessage.value = e instanceof Error ? e.message : 'Save failed'
-    saveMessageType.value = 'error'
+  } catch (_e) {
+    // save failed silently
   } finally {
     isSaving.value = false
   }
@@ -239,21 +244,12 @@ async function saveSong() {
         <button
           v-if="hasChords && !isSaving"
           class="save-btn"
+          :class="{ 'save-dirty': isDirty }"
           @click="saveSong"
         >
-          Save
+{{ isDirty ? 'Save' : 'Saved' }}
         </button>
         <span v-if="isSaving" class="save-status">Saving…</span>
-        <span
-          v-if="saveMessage"
-          class="save-status"
-          :class="'save-' + saveMessageType"
-        >
-          {{ saveMessage }}
-        </span>
-        <button class="reset-btn" @click="resetSong">
-          Load different file
-        </button>
       </div>
     </footer>
   </div>
@@ -385,35 +381,17 @@ async function saveSong() {
   background: rgba(90, 200, 250, 0.25);
 }
 
+.save-btn:not(.save-dirty) {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .save-status {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
 }
 
-.save-success {
-  color: #30d158;
-}
 
-.save-warning {
-  color: #ffd60a;
-}
-
-.save-error {
-  color: #ff453a;
-}
-
-.reset-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 8px;
-}
-
-.reset-btn:hover {
-  color: rgba(255, 255, 255, 0.6);
-}
 
 .rate-slider {
   position: fixed;
