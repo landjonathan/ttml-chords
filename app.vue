@@ -115,6 +115,18 @@ function resetSong() {
   showLibrary.value = false
 }
 
+function revertChanges() {
+  if (!savedSnapshot.value) return
+  const { chords, rate } = JSON.parse(savedSnapshot.value)
+  lines.value.forEach((line, i) => {
+    line.words.forEach((word, j) => {
+      word.chord = chords[i]?.[j] || undefined
+    })
+  })
+  playbackRate.value = rate
+  playerRef.value?.setRate(rate)
+}
+
 async function saveSong() {
   if (!parsedTtml.value || !hasChords.value) return
   if (!artistName.value.trim() || !songName.value.trim()) {
@@ -248,6 +260,13 @@ async function saveSong() {
           @click="saveSong"
         >
 {{ isDirty ? 'Save' : 'Saved' }}
+        </button>
+        <button
+          v-if="isDirty && savedSnapshot && !isSaving"
+          class="reset-btn"
+          @click="revertChanges"
+        >
+          Reset
         </button>
         <span v-if="isSaving" class="save-status">Saving…</span>
       </div>
@@ -384,6 +403,23 @@ async function saveSong() {
 .save-btn:not(.save-dirty) {
   opacity: 0.4;
   pointer-events: none;
+}
+
+.reset-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reset-btn:hover {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .save-status {
