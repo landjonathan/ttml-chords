@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { LyricLine, ParsedTtml } from '~/types'
-import { parseTtml } from '~/composables/useTtmlParser'
+import { parseTtml, findActiveLineIndex } from '~/composables/useTtmlParser'
 import { serializeTtml } from '~/composables/useTtmlSerializer'
 
 const lines = ref<LyricLine[]>([])
@@ -25,6 +25,15 @@ const saveMessageType = ref<'success' | 'warning' | 'error'>('success')
 const parsedTtml = ref<ParsedTtml | null>(null)
 
 const hasLyrics = computed(() => lines.value.length > 0)
+
+const lineProgress = computed(() => {
+  const idx = findActiveLineIndex(lines.value, currentTimeMs.value)
+  if (idx < 0) return 0
+  const line = lines.value[idx]
+  const duration = line.endMs - line.beginMs
+  if (duration <= 0) return 0
+  return Math.min(100, Math.max(0, ((currentTimeMs.value - line.beginMs) / duration) * 100))
+})
 const hasChords = computed(() => lines.value.some((l) => l.words.some((w) => w.chord)))
 const simulateMode = computed(() => hasLyrics.value && !audioSrc.value)
 const lyricsDuration = computed(() => {
@@ -140,6 +149,11 @@ async function saveSong() {
 
 <template>
   <div class="app">
+    <div
+      v-if="hasLyrics && isPlaying"
+      class="progress-gradient"
+      :style="{ transform: `scaleX(${lineProgress / 100})`, transitionDuration: lineProgress < 3 ? '0s' : '0.15s' }"
+    />
     <header class="app-header">
       <h1>TTML Chords</h1>
       <button v-if="hasLyrics" class="library-toggle" @click="showLibrary = !showLibrary">
@@ -230,6 +244,18 @@ async function saveSong() {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+}
+
+.progress-gradient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.05));
+  transform-origin: left;
+  will-change: transform;
+  transition: transform 0.15s linear;
 }
 
 .app-header {

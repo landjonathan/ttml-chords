@@ -98,6 +98,7 @@ function setLineRef(el: unknown, index: number) {
       <template v-else>
         {{ line.text }}
       </template>
+
     </div>
 
     <div class="lyrics-spacer-bottom"></div>
