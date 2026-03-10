@@ -94,7 +94,7 @@ const buildChordsDiv = (lines: LyricLine[]) => {
 /**
  * Serialize ParsedTtml (with chord-annotated words) back into a TTML XML string.
  */
-export const serializeTtml = (parsed: ParsedTtml, artistName?: string, songName?: string) => {
+export const serializeTtml = (parsed: ParsedTtml, artistName?: string, songName?: string, playbackRate?: number) => {
   const title = songName || parsed.songName || ''
   const artist = artistName || parsed.artistName || ''
   const timing = parsed.timing || 'Word'
@@ -104,6 +104,8 @@ export const serializeTtml = (parsed: ParsedTtml, artistName?: string, songName?
   const metaParts: string[] = []
   if (title) metaParts.push(`      <ttm:title>${escapeXml(title)}</ttm:title>`)
   if (artist) metaParts.push(`      <ttm:desc>${escapeXml(artist)}</ttm:desc>`)
+  const rate = playbackRate ?? parsed.playbackRate
+  if (rate && rate !== 1) metaParts.push(`      <ttm:item name="playbackRate">${rate}</ttm:item>`)
   metaParts.push(
     `      <ttm:agent xml:id="chords" type="other">\n        <ttm:name>Chords</ttm:name>\n      </ttm:agent>`
   )

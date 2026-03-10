@@ -20,6 +20,7 @@ const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const isSeeking = ref(false)
+const playbackRate = ref(1)
 
 // Simulation mode state (when no audio file is provided)
 const simStartTime = ref(0)
@@ -116,7 +117,7 @@ function pauseSimulation() {
 
 function tickSimulation() {
   if (!isPlaying.value) return
-  const elapsed = (performance.now() - simStartTime.value) / 1000
+  const elapsed = (performance.now() - simStartTime.value) / 1000 * playbackRate.value
   currentTime.value = simOffset.value + elapsed
   emit('timeUpdate', currentTime.value * 1000)
 
@@ -152,11 +153,21 @@ watch(
   }
 )
 
+function setRate(val: number) {
+  playbackRate.value = val
+  if (audioEl.value) {
+    audioEl.value.playbackRate = val
+  } else if (props.simulateMode && isPlaying.value) {
+    simOffset.value = currentTime.value
+    simStartTime.value = performance.now()
+  }
+}
+
 onUnmounted(() => {
   cancelAnimationFrame(simRaf)
 })
 
-defineExpose({ seekTo: (ms: number) => {
+defineExpose({ setRate, seekTo: (ms: number) => {
   const sec = ms / 1000
   if (audioEl.value) {
     audioEl.value.currentTime = sec

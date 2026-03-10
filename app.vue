@@ -10,6 +10,7 @@ const currentTimeMs = ref(0)
 const isPlaying = ref(false)
 const parseError = ref('')
 const playerRef = ref<InstanceType<typeof AudioPlayer> | null>(null)
+const playbackRate = ref(1)
 const songName = ref('')
 const artistName = ref('')
 const hasEmbeddedChords = ref(false)
@@ -50,6 +51,10 @@ function loadTtml(content: string) {
     artistName.value = result.artistName || ''
     hasEmbeddedChords.value = result.hasChords
     parsedTtml.value = result
+    if (result.playbackRate) {
+      playbackRate.value = result.playbackRate
+      playerRef.value?.setRate(result.playbackRate)
+    }
     showLibrary.value = false
   } catch (e) {
     parseError.value = e instanceof Error ? e.message : 'Failed to parse TTML'
@@ -112,7 +117,8 @@ async function saveSong() {
     const ttmlWithChords = serializeTtml(
       { ...parsedTtml.value, lines: lines.value },
       artistName.value,
-      songName.value
+      songName.value,
+      playbackRate.value
     )
 
     const res = await fetch('/api/songs/save', {
@@ -154,6 +160,21 @@ async function saveSong() {
       class="progress-gradient"
       :style="{ transform: `scaleX(${lineProgress / 100})`, transitionDuration: lineProgress < 3 ? '0s' : '0.15s' }"
     />
+
+    <div v-if="hasLyrics" class="rate-slider">
+      <span class="rate-label">{{ playbackRate.toFixed(2) }}x</span>
+      <input
+        type="range"
+        min="0.5"
+        max="2"
+        step="0.05"
+        :value="playbackRate"
+        class="rate-input"
+        orient="vertical"
+        @input="(e: Event) => { playbackRate = parseFloat((e.target as HTMLInputElement).value); playerRef?.setRate(playbackRate) }"
+      />
+    </div>
+
     <header class="app-header">
       <h1>TTML Chords</h1>
       <button v-if="hasLyrics" class="library-toggle" @click="showLibrary = !showLibrary">
@@ -392,5 +413,46 @@ async function saveSong() {
 
 .reset-btn:hover {
   color: rgba(255, 255, 255, 0.6);
+}
+
+.rate-slider {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 5;
+}
+
+.rate-input {
+  writing-mode: vertical-lr;
+  direction: ltr;
+  height: 60vh;
+  width: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.rate-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.rate-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -21,6 +21,7 @@ export interface ParsedTtml {
   songName?: string
   artistName?: string
   hasChords: boolean
+  playbackRate?: number
 }
 
 // Ultimate Guitar types

@@ -229,10 +229,21 @@ export function parseTtml(xml: string): ParsedTtml {
   const songName = titleEl?.textContent?.trim() || undefined
   const artistName = descEl?.textContent?.trim() || agentEl?.textContent?.trim() || agentEl?.getAttribute('xml:id')?.trim() || undefined
 
+  // Extract playback rate from <ttm:item name="playbackRate">
+  const itemEls = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'item')
+  let playbackRate: number | undefined
+  for (const item of Array.from(itemEls)) {
+    if (item.getAttribute('name') === 'playbackRate') {
+      const val = parseFloat(item.textContent?.trim() || '')
+      if (!isNaN(val) && val > 0) playbackRate = val
+      break
+    }
+  }
+
   // Extract chords from agent div
   const hasChords = applyChordsFromAgent(doc, lines)
 
-  return { lines, timing, lang, songName, artistName, hasChords }
+  return { lines, timing, lang, songName, artistName, hasChords, playbackRate }
 }
 
 /**
