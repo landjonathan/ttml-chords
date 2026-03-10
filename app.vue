@@ -193,7 +193,11 @@ async function saveSong() {
     </div>
 
     <header class="app-header">
-      <h1>TTML Chords</h1>
+      <template v-if="hasLyrics && (songName || artistName)">
+        <h1 class="song-title">{{ songName }}</h1>
+        <p v-if="artistName" class="song-artist">{{ artistName }}</p>
+      </template>
+      <h1 v-else>TTML Chords</h1>
       <button v-if="hasLyrics" class="library-toggle" @click="showLibrary = !showLibrary">
         {{ showLibrary ? 'Close' : 'Library' }}
       </button>
@@ -308,6 +312,21 @@ async function saveSong() {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   margin: 0;
+}
+
+.song-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  margin: 0;
+}
+
+.song-artist {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 2px 0 0;
 }
 
 .library-toggle {
