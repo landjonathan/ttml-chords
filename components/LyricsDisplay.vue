@@ -149,7 +149,7 @@ function setLineRef(el: unknown, index: number) {
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 2;
   user-select: none;
 }
 
@@ -162,7 +162,7 @@ function setLineRef(el: unknown, index: number) {
   color: rgba(255, 255, 255, 1);
   opacity: 1;
   transform: scale(1);
-  padding: 12px 0;
+  padding: 1em 0;
 }
 
 .line.past {
@@ -192,7 +192,7 @@ function setLineRef(el: unknown, index: number) {
 /* Chord annotations */
 .word-has-chord {
   position: relative;
-  padding-top: 1.3em;
+  padding-top: 0.7em;
 }
 
 .chord-label {
