@@ -22,6 +22,7 @@ const songs = ref<SavedSong[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 const fetchingFilename = ref('')
+const confirmDelete = ref<SavedSong | null>(null)
 
 async function loadSongs() {
   isLoading.value = true
@@ -51,6 +52,19 @@ async function selectSong(song: SavedSong) {
   }
 }
 
+async function deleteSong() {
+  const song = confirmDelete.value
+  if (!song) return
+  try {
+    await $fetch(`/api/songs/${encodeURIComponent(song.filename)}`, { method: 'DELETE' })
+    confirmDelete.value = null
+    await loadSongs()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to delete song'
+    confirmDelete.value = null
+  }
+}
+
 function onTtmlLoaded(content: string, fileName: string) {
   emit('ttmlLoaded', content, fileName)
 }
@@ -70,17 +84,23 @@ defineExpose({ loadSongs })
 
     <!-- Saved songs list -->
     <div v-if="songs.length > 0" class="songs-list">
-      <button
-        v-for="s in songs"
-        :key="s.filename"
-        class="song-item"
-        :disabled="fetchingFilename === s.filename"
-        @click="selectSong(s)"
-      >
-        <span class="song-name">{{ s.song }}</span>
-        <span class="song-artist">{{ s.artist }}</span>
-        <span v-if="fetchingFilename === s.filename" class="song-loading">Loading…</span>
-      </button>
+      <div v-for="s in songs" :key="s.filename" class="song-row">
+        <button
+          class="song-item"
+          :disabled="fetchingFilename === s.filename"
+          @click="selectSong(s)"
+        >
+          <span class="song-name">{{ s.song }}</span>
+          <span class="song-artist">{{ s.artist }}</span>
+          <span v-if="fetchingFilename === s.filename" class="song-loading">Loading…</span>
+        </button>
+        <button class="delete-btn" @click.stop="confirmDelete = s" title="Delete">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <p v-else-if="!isLoading" class="empty-message">
@@ -101,6 +121,18 @@ defineExpose({ loadSongs })
         @audio-loaded="onAudioLoaded"
       />
     </div>
+    <!-- Delete confirmation dialog -->
+    <Teleport to="body">
+      <div v-if="confirmDelete" class="dialog-backdrop" @click.self="confirmDelete = null">
+        <div class="dialog">
+          <p class="dialog-message">Delete <strong>{{ confirmDelete.song }}</strong> by {{ confirmDelete.artist }}?</p>
+          <div class="dialog-actions">
+            <button class="dialog-btn" @click="confirmDelete = null">Cancel</button>
+            <button class="dialog-btn dialog-btn-danger" @click="deleteSong">Delete</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -138,6 +170,21 @@ defineExpose({ loadSongs })
   padding: 4px;
 }
 
+.song-row {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.song-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.song-row:hover .delete-btn {
+  opacity: 1;
+}
+
 .song-item {
   display: flex;
   align-items: center;
@@ -151,16 +198,28 @@ defineExpose({ loadSongs })
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s;
-}
-
-.song-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  flex: 1;
+  min-width: 0;
 }
 
 .song-item:disabled {
   opacity: 0.5;
   cursor: wait;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  padding: 6px 10px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.delete-btn:hover {
+  color: #ff453a;
 }
 
 .song-name {
@@ -211,5 +270,64 @@ defineExpose({ loadSongs })
   color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog {
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 20px 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+
+.dialog-message {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.4;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.dialog-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dialog-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dialog-btn-danger {
+  background: rgba(255, 69, 58, 0.15);
+  border-color: rgba(255, 69, 58, 0.3);
+  color: #ff453a;
+}
+
+.dialog-btn-danger:hover {
+  background: rgba(255, 69, 58, 0.25);
 }
 </style>
