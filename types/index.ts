@@ -45,4 +45,5 @@ export interface UgChordPosition {
 export interface UgChordLine {
   lyrics: string
   chords: UgChordPosition[]
+  section?: string
 }

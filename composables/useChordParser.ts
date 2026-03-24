@@ -21,6 +21,20 @@ function isSectionHeader(line: string): boolean {
 }
 
 /**
+ * Normalize a section header label to a canonical type.
+ * "[Verse 1]", "[Verse]", "[Verse 3]" → 'verse'
+ * "[Chorus]", "[Chorus 2]" → 'chorus'
+ * "[Bridge]", "[Pre-Chorus]" etc. → 'bridge', 'pre-chorus'
+ * Unknown → 'other'
+ */
+function normalizeSectionType(header: string): string {
+  const inner = header.replace(/^\[|\]$/g, '').trim().toLowerCase()
+  const base = inner.replace(/\s*\d+$/, '').trim()
+  const known = ['verse', 'chorus', 'bridge', 'pre-chorus', 'intro', 'outro', 'interlude', 'solo']
+  return known.find((k) => base === k) ?? 'other'
+}
+
+/**
  * Extract chord names and their character positions from a chord line.
  * The position is calculated based on where the chord would appear
  * after stripping all [ch]/[/ch] tags.
@@ -72,9 +86,14 @@ export function parseUgContent(content: string): UgChordLine[] {
   const rawLines = cleaned.split('\n')
   const result: UgChordLine[] = []
 
+  let currentSection: string | undefined
   let i = 0
   while (i < rawLines.length) {
     const line = rawLines[i]
+
+    if (isSectionHeader(line.trim())) {
+      currentSection = normalizeSectionType(line.trim())
+    }
 
     if (isChordLine(line)) {
       const chords = extractChords(line)
@@ -100,7 +119,7 @@ export function parseUgContent(content: string): UgChordLine[] {
       }
 
       if (lyricsLine.trim() && chords.length > 0) {
-        result.push({ lyrics: lyricsLine, chords })
+        result.push({ lyrics: lyricsLine, chords, section: currentSection })
       }
 
       i = j
