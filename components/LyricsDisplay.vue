@@ -249,7 +249,7 @@ function setLineRef(el: unknown, index: number) {
 .lyrics-container {
   flex: 1;
   overflow-y: auto;
-  padding: 0 32px;
+  padding: 0 calc(32px + env(safe-area-inset-right, 0px)) 0 calc(32px + env(safe-area-inset-left, 0px));
   scroll-behavior: smooth;
   mask-image: linear-gradient(
     to bottom,
@@ -442,7 +442,7 @@ function setLineRef(el: unknown, index: number) {
     font-size: 1.2rem;
   }
   .lyrics-container {
-    padding: 0 20px;
+    padding: 0 calc(20px + env(safe-area-inset-right, 0px)) 0 calc(20px + env(safe-area-inset-left, 0px));
   }
 }
 </style>

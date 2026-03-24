@@ -342,6 +342,7 @@ if (import.meta.client) {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   position: relative;
 }
@@ -359,7 +360,7 @@ if (import.meta.client) {
 
 .app-header {
   flex-shrink: 0;
-  padding: 12px 16px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -448,7 +449,7 @@ if (import.meta.client) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 24px calc(24px + env(safe-area-inset-right, 0px)) 24px calc(24px + env(safe-area-inset-left, 0px));
 }
 
 .library-overlay {
@@ -476,7 +477,7 @@ if (import.meta.client) {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px 24px;
+  padding: 12px calc(24px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) calc(24px + env(safe-area-inset-left, 0px));
   background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
 }
 
@@ -495,7 +496,7 @@ if (import.meta.client) {
 
 .right-sidebar {
   position: fixed;
-  right: 0;
+  right: env(safe-area-inset-right, 0px);
   top: 0;
   bottom: 0;
   width: 40px;

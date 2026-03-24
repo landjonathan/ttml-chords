@@ -10,14 +10,14 @@ export default defineNuxtConfig({
       title: 'TTML Lyrics Viewer',
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       ],
     },
   },
     
   vite: {
     server: {
-        allowedHosts: ['server']
+        allowedHosts: ['server', 'mbp']
     }
   }
 })
