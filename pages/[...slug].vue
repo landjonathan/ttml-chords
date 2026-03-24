@@ -119,14 +119,10 @@ function onChordsMatched(annotatedLines: LyricLine[], artist: string, song: stri
   if (song) songName.value = song
 }
 
-function onChordMoved(lineIndex: number, fromWord: number, toWord: number) {
+function onChordsUpdated(lineIndex: number, chords: (string | undefined)[]) {
   const words = lines.value[lineIndex]?.words
   if (!words) return
-  const chord = words[fromWord]?.chord
-  if (!chord) return
-  // Swap if target already has a chord, otherwise just move
-  words[fromWord].chord = words[toWord].chord
-  words[toWord].chord = chord
+  words.forEach((w, i) => { w.chord = chords[i] })
 }
 
 function resetSong() {
@@ -320,7 +316,7 @@ if (import.meta.client) {
           :is-playing="isPlaying"
           :transposition="transposition"
           @seek-to="onSeekTo"
-          @chord-moved="onChordMoved"
+          @chords-updated="onChordsUpdated"
         />
       </template>
     </main>

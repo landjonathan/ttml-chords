@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seekTo: [timeMs: number]
-  chordMoved: [lineIndex: number, fromWord: number, toWord: number]
+  chordsUpdated: [lineIndex: number, chords: (string | undefined)[]]
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -22,7 +22,9 @@ const lineRefs = ref<(HTMLDivElement | null)[]>([])
 // Chord editing state
 const hoveredChord = ref<{ line: number; word: number } | null>(null)
 const editingChord = ref<{ line: number; word: number } | null>(null)
-const editingDirty = ref(false)
+const editingOriginWord = ref(-1)
+// Buffered chord state for the line being edited (wordIndex → chord)
+const pendingChords = ref<(string | undefined)[]>([])
 
 const isChordHovered = (lineIdx: number, wIdx: number) =>
   hoveredChord.value?.line === lineIdx && hoveredChord.value?.word === wIdx
@@ -32,6 +34,29 @@ const isChordEditing = (lineIdx: number, wIdx: number) =>
 
 const showPopover = (lineIdx: number, wIdx: number) =>
   isChordEditing(lineIdx, wIdx) || isChordHovered(lineIdx, wIdx)
+
+const editingDirty = computed(() => {
+  if (!editingChord.value) return false
+  const lineWords = props.lines[editingChord.value.line]?.words
+  if (!lineWords || pendingChords.value.length === 0) return false
+  return lineWords.some((w, i) => (w.chord ?? undefined) !== pendingChords.value[i])
+})
+
+/** Check if moving in a direction would swap with another chord. */
+const wouldSwap = (direction: -1 | 1) => {
+  if (!editingChord.value || pendingChords.value.length === 0) return false
+  const target = editingChord.value.word + direction
+  if (target < 0 || target >= pendingChords.value.length) return false
+  return !!pendingChords.value[target]
+}
+
+/** Return the chord to display for a word, accounting for pending edits. */
+const wordChord = (lineIdx: number, wIdx: number) => {
+  if (editingChord.value?.line === lineIdx && pendingChords.value.length > 0) {
+    return pendingChords.value[wIdx]
+  }
+  return props.lines[lineIdx]?.words[wIdx]?.chord
+}
 
 function onChordEnter(lineIdx: number, wIdx: number) {
   if (editingChord.value) return
@@ -47,26 +72,40 @@ function startEditing(lineIdx: number, wIdx: number, e: Event) {
   e.stopPropagation()
   editingChord.value = { line: lineIdx, word: wIdx }
   hoveredChord.value = { line: lineIdx, word: wIdx }
-  editingDirty.value = false
-  // Seek playback to this line
+  editingOriginWord.value = wIdx
+  // Snapshot current chords for this line
+  pendingChords.value = props.lines[lineIdx].words.map((w) => w.chord)
   emit('seekTo', props.lines[lineIdx].beginMs)
 }
 
-function stopEditing(e: Event) {
+function revertEditing(e: Event) {
   e.stopPropagation()
+  if (!editingChord.value) return
+  const lineIdx = editingChord.value.line
+  // Restore original snapshot
+  pendingChords.value = props.lines[lineIdx].words.map((w) => w.chord)
+  editingChord.value = { line: lineIdx, word: editingOriginWord.value }
+  hoveredChord.value = { line: lineIdx, word: editingOriginWord.value }
+}
+
+function commitEditing(e: Event) {
+  e.stopPropagation()
+  if (editingChord.value && editingDirty.value) {
+    emit('chordsUpdated', editingChord.value.line, [...pendingChords.value])
+  }
   editingChord.value = null
   hoveredChord.value = null
-  editingDirty.value = false
+  pendingChords.value = []
 }
 
 function onClickOutside(e: MouseEvent) {
   if (!editingChord.value) return
-  // If changes were made, keep editing (user must explicitly confirm)
   if (editingDirty.value) return
   const target = e.target as HTMLElement
   if (target.closest('.chord-popover') || target.closest('.chord-editing')) return
   editingChord.value = null
   hoveredChord.value = null
+  pendingChords.value = []
 }
 
 onMounted(() => document.addEventListener('pointerdown', onClickOutside))
@@ -80,10 +119,14 @@ function moveChord(direction: -1 | 1, e: Event) {
   const lineWords = props.lines[line]?.words
   if (!lineWords || target < 0 || target >= lineWords.length) return
 
-  emit('chordMoved', line, word, target)
+  // Recompute from original: only the edited chord moves, everything else stays in place
+  const original = lineWords.map((w) => w.chord)
+  pendingChords.value = [...original]
+  pendingChords.value[editingOriginWord.value] = original[target]
+  pendingChords.value[target] = original[editingOriginWord.value]
+
   editingChord.value = { line, word: target }
   hoveredChord.value = { line, word: target }
-  editingDirty.value = true
 }
 
 const activeLineIndex = computed(() =>
@@ -165,23 +208,24 @@ function setLineRef(el: unknown, index: number) {
           v-for="(word, wIdx) in line.words"
           :key="wIdx"
           class="word"
-          :class="{ 'word-has-chord': !!word.chord }"
+          :class="{ 'word-has-chord': !!wordChord(index, wIdx) }"
         >
           <span
-            v-if="word.chord"
+            v-if="wordChord(index, wIdx)"
             class="chord-label"
             :class="{ 'chord-interactive': true, 'chord-editing': isChordEditing(index, wIdx) }"
             @mouseenter="onChordEnter(index, wIdx)"
             @mouseleave="onChordLeave"
           >
-            {{ displayChord(word.chord) }}
+            {{ displayChord(wordChord(index, wIdx)!) }}
 
             <!-- Popover -->
             <span v-if="showPopover(index, wIdx)" class="chord-popover" @click.stop>
               <template v-if="isChordEditing(index, wIdx)">
-                <button class="pop-btn" :disabled="wIdx === 0" @click="moveChord(-1, $event)">‹</button>
-                <button class="pop-btn" :disabled="wIdx === line.words.length - 1" @click="moveChord(1, $event)">›</button>
-                <button v-if="editingDirty" class="pop-btn pop-done" @click="stopEditing($event)">✓</button>
+                <button v-if="editingDirty" class="pop-btn pop-revert" @click="revertEditing($event)">✕</button>
+                <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(-1) }" :disabled="wIdx === 0" @click="moveChord(-1, $event)">{{ wouldSwap(-1) ? '⇆' : '‹' }}</button>
+                <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(1) }" :disabled="wIdx === line.words.length - 1" @click="moveChord(1, $event)">{{ wouldSwap(1) ? '⇆' : '›' }}</button>
+                <button v-if="editingDirty" class="pop-btn pop-done" @click="commitEditing($event)">✓</button>
               </template>
               <button v-else class="pop-btn" @click="startEditing(index, wIdx, $event)">✎</button>
             </span>
@@ -361,6 +405,19 @@ function setLineRef(el: unknown, index: number) {
 .pop-btn:disabled {
   opacity: 0.2;
   cursor: default;
+}
+
+.pop-swap {
+  color: #ffd60a;
+  font-size: 11px;
+}
+
+.pop-revert {
+  color: #ff453a;
+}
+
+.pop-revert:hover {
+  background: rgba(255, 69, 58, 0.15);
 }
 
 .pop-done {
