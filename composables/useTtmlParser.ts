@@ -32,6 +32,10 @@ function parseTime(raw: string | null): number {
     return Math.round(parseInt(m) * 60000 + parseFloat(sec) * 1000)
   }
 
+  // Bare number fallback — treat as seconds (Apple Music TTML format)
+  const bare = parseFloat(s)
+  if (!isNaN(bare)) return Math.round(bare * 1000)
+
   return 0
 }
 
@@ -180,27 +184,64 @@ export function parseTtml(xml: string): ParsedTtml {
     // Check for background vocal attribute
     const isBackground =
       p.getAttribute('ttm:role') === 'x-bg' ||
-      p.getAttribute('itunes:key') === 'L2'
+      p.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'role') === 'x-bg'
 
-    // Extract word-level spans
-    const spanElements = Array.from(p.getElementsByTagNameNS('*', 'span'))
+    // Extract word-level spans, merging syllable splits (consecutive
+    // spans with no whitespace text node between them) into whole words.
+    // Inline bg vocal wrappers (<span ttm:role="x-bg">) are collected
+    // separately and emitted as distinct background lines.
     const words: LyricWord[] = []
+    const bgWordGroups: LyricWord[][] = []
 
-    // Filter to direct child spans only (or spans that have timing)
-    spanElements.forEach((span) => {
-      const spanBegin = span.getAttribute('begin')
-      const spanEnd = span.getAttribute('end')
-      if (spanBegin || spanEnd) {
-        const wordText = span.textContent?.trim() || ''
-        if (wordText) {
-          words.push({
-            text: wordText,
+    const collectSpans = (parent: Element, target: LyricWord[]) => {
+      for (const node of Array.from(parent.childNodes)) {
+        if (node.nodeType === Node.TEXT_NODE) continue
+        if (node.nodeType !== Node.ELEMENT_NODE) continue
+        const span = node as Element
+        if (span.localName !== 'span') continue
+
+        const spanBegin = span.getAttribute('begin')
+        const spanEnd = span.getAttribute('end')
+
+        // Wrapper span (no timing) — check if it's a bg vocal group
+        if (!spanBegin && !spanEnd) {
+          const isBg =
+            span.getAttribute('ttm:role') === 'x-bg' ||
+            span.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'role') === 'x-bg'
+          if (isBg) {
+            const bgWords: LyricWord[] = []
+            collectSpans(span, bgWords)
+            if (bgWords.length > 0) bgWordGroups.push(bgWords)
+          } else {
+            collectSpans(span, target)
+          }
+          continue
+        }
+
+        const syllable = span.textContent || ''
+        if (!syllable) continue
+
+        // Check if the previous sibling is a span with no whitespace in between
+        const prev = node.previousSibling
+        const hasPrecedingSpace =
+          !prev ||
+          prev.nodeType !== Node.ELEMENT_NODE ||
+          (prev as Element).localName !== 'span'
+
+        if (!hasPrecedingSpace && target.length > 0) {
+          const last = target[target.length - 1]
+          last.text += syllable
+          last.endMs = parseTime(spanEnd)
+        } else {
+          target.push({
+            text: syllable.trimStart(),
             beginMs: parseTime(spanBegin),
             endMs: parseTime(spanEnd),
           })
         }
       }
-    })
+    }
+    collectSpans(p, words)
 
     const text =
       words.length > 0 ? words.map((w) => w.text).join(' ') : getTextContent(p)
@@ -215,6 +256,21 @@ export function parseTtml(xml: string): ParsedTtml {
         isBackground,
       })
     }
+
+    // Emit separate background lines for inline bg vocal groups
+    for (const bgWords of bgWordGroups) {
+      const bgText = bgWords.map((w) => w.text).join(' ')
+      if (bgText) {
+        lines.push({
+          index: idx,
+          text: bgText,
+          beginMs: bgWords[0].beginMs,
+          endMs: bgWords[bgWords.length - 1].endMs,
+          words: bgWords,
+          isBackground: true,
+        })
+      }
+    }
   })
 
   // Re-index after filtering
@@ -225,9 +281,8 @@ export function parseTtml(xml: string): ParsedTtml {
   // Extract metadata
   const titleEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'title')[0]
   const descEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'desc')[0]
-  const agentEl = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'agent')[0]
   const songName = titleEl?.textContent?.trim() || undefined
-  const artistName = descEl?.textContent?.trim() || agentEl?.textContent?.trim() || agentEl?.getAttribute('xml:id')?.trim() || undefined
+  const artistName = descEl?.textContent?.trim() || undefined
 
   // Extract playback rate from <ttm:item name="playbackRate">
   const itemEls = doc.getElementsByTagNameNS('http://www.w3.org/ns/ttml#metadata', 'item')

@@ -9,6 +9,7 @@ const emit = defineEmits<{
 const isDragging = ref(false)
 const ttmlFileName = ref('')
 const audioFileName = ref('')
+const fileInput = ref<HTMLInputElement>()
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false
@@ -48,6 +49,7 @@ function processFiles(files: FileList) {
       @dragover.prevent="isDragging = true"
       @dragleave="isDragging = false"
       @drop.prevent="handleDrop"
+      @click="fileInput?.click()"
     >
       <div class="drop-content">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -56,16 +58,15 @@ function processFiles(files: FileList) {
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
         <p>Drop <strong>.ttml</strong> and <strong>audio</strong> files here</p>
-        <label class="browse-btn">
-          Browse files
-          <input
-            type="file"
-            accept=".ttml,.xml,audio/*"
-            multiple
-            hidden
-            @change="handleFileInput"
-          />
-        </label>
+        <span class="browse-btn">Browse files</span>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".ttml,.xml,audio/*"
+          multiple
+          hidden
+          @change="handleFileInput"
+        />
       </div>
     </div>
 
