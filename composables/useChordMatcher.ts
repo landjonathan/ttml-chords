@@ -147,35 +147,77 @@ export function matchChordsToTtml(
     chords: [] as ChordPosition[],
   }))
 
-  // ── Phase 1: text-similarity matching ──
+  // ── Phase 1: text-similarity matching with multi-line merging ──
+  // A single UG line may span multiple TTML lines. Try spans of 1-3
+  // consecutive TTML lines and pick the best match.
   let ugSearchStart = 0
 
-  for (let i = 0; i < result.length; i++) {
-    const ttmlText = result[i].text
-    if (toWords(ttmlText).length === 0) continue
+  for (let i = 0; i < result.length; ) {
+    if (toWords(result[i].text).length === 0) { i++; continue }
 
-    let bestIdx = -1
+    let bestUgIdx = -1
     let bestScore = 0
+    let bestSpan = 1
+
+    const tryMatch = (u: number) => {
+      for (let span = 1; span <= 3 && i + span <= result.length; span++) {
+        const merged = result.slice(i, i + span).map((l) => l.text).join(' ')
+        const score = similarity(merged, ugLines[u].lyrics)
+        if (score > bestScore) { bestScore = score; bestUgIdx = u; bestSpan = span }
+      }
+    }
 
     for (let u = ugSearchStart; u < ugLines.length; u++) {
-      const score = similarity(ttmlText, ugLines[u].lyrics)
-      if (score > bestScore) { bestScore = score; bestIdx = u }
-      if (score > 0.8) break
+      tryMatch(u)
+      if (bestScore > 0.8) break
     }
 
     if (bestScore < 0.5) {
       for (let u = 0; u < ugSearchStart && u < ugLines.length; u++) {
-        const score = similarity(ttmlText, ugLines[u].lyrics)
-        if (score > bestScore) { bestScore = score; bestIdx = u }
+        tryMatch(u)
       }
     }
 
-    if (bestIdx === -1 || bestScore < 0.4) continue
+    if (bestUgIdx === -1 || bestScore < 0.4) { i++; continue }
 
-    if (bestIdx >= ugSearchStart) ugSearchStart = bestIdx + 1
+    if (bestUgIdx >= ugSearchStart) ugSearchStart = bestUgIdx + 1
 
-    matched[i] = bestIdx
-    applyChordsAligned(result[i], ugLines[bestIdx])
+    const spanIndices = Array.from({ length: bestSpan }, (_, s) => i + s)
+    for (const idx of spanIndices) matched[idx] = bestUgIdx
+
+    if (bestSpan === 1) {
+      // Single line match — apply directly
+      applyChordsAligned(result[i], ugLines[bestUgIdx])
+    } else {
+      // Multi-line match — map chords to merged text, then distribute
+      const mergedText = spanIndices.map((idx) => result[idx].text).join(' ')
+      const chords = mapChordsToCharPositions(mergedText, ugLines[bestUgIdx].lyrics, ugLines[bestUgIdx].chords)
+
+      let offset = 0
+      for (let s = 0; s < spanIndices.length; s++) {
+        const idx = spanIndices[s]
+        const lineLen = result[idx].text.length
+        const isLast = s === spanIndices.length - 1
+
+        for (const c of chords) {
+          if (c.charIndex >= offset && c.charIndex < offset + lineLen) {
+            const local = { chord: c.chord, charIndex: c.charIndex - offset }
+            if (!result[idx].chords.some((e) => e.charIndex === local.charIndex)) {
+              result[idx].chords.push(local)
+            }
+          } else if (isLast && c.charIndex >= offset + lineLen) {
+            // Trailing chords go to the last line in the group
+            const local = { chord: c.chord, charIndex: lineLen }
+            if (!result[idx].chords.some((e) => e.charIndex === local.charIndex)) {
+              result[idx].chords.push(local)
+            }
+          }
+        }
+        offset += lineLen + 1 // +1 for joining space
+      }
+    }
+
+    i += bestSpan
   }
 
   // ── Phase 2: section-type fallback ──

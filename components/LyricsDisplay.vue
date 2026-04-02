@@ -422,12 +422,13 @@ function setLineRef(el: unknown, index: number) {
 }
 
 .segment-with-chord {
+  position: relative;
   display: inline;
 }
 
 .chord-label {
   position: absolute;
-  top: 0;
+  bottom: 100%;
   left: 0;
   font-size: 0.6em;
   font-weight: 700;
