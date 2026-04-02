@@ -300,6 +300,24 @@ function setLineRef(el: unknown, index: number) {
             <span v-else class="word-text">{{ seg.text }}</span>
           </template>
         </span>
+        <!-- Trailing chords (charIndex >= text length) -->
+        <span
+          v-for="tc in lineChords(index).filter(c => c.charIndex >= line.text.length)"
+          :key="'t' + tc.charIndex"
+          class="word word-has-chord"
+        >
+          <span class="segment-with-chord">
+            <span
+              class="chord-label chord-interactive"
+              :class="{ 'chord-editing': isChordEditing(index, tc.charIndex) }"
+              @mouseenter="onChordEnter(index, tc.charIndex)"
+              @mouseleave="onChordLeave"
+            >
+              {{ displayChord(tc.chord) }}
+            </span>
+            <span class="word-text">​</span>
+          </span>
+        </span>
       </template>
 
       <!-- Plain text -->

@@ -102,7 +102,7 @@ function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
       const fraction = duration > 0 ? (beginMs - line.beginMs) / duration : 0
       const charIndex = Math.min(
         Math.round(fraction * textLen),
-        textLen - 1,
+        textLen,
       )
       if (!line.chords.some((c) => c.charIndex === charIndex)) {
         line.chords.push({ chord, charIndex })

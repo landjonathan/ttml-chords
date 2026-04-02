@@ -174,8 +174,14 @@ export function mapChordsToCharPositions(
         }
       }
 
-      // Chord is in whitespace — snap to nearest word start
+      // Chord is in whitespace
       if (ugWordIdx === -1) {
+        const lastUgWord = ugWords[ugWords.length - 1]
+        // Trailing chord (past end of lyrics) → after TTML text
+        if (charPosition >= lastUgWord.end) {
+          return { chord, charIndex: ttmlText.length }
+        }
+        // Mid-line whitespace — snap to nearest word start
         let bestDist = Infinity
         for (let w = 0; w < ugWords.length; w++) {
           const dist = Math.abs(charPosition - ugWords[w].start)
