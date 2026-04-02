@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { LyricLine, ParsedTtml } from '~/types'
+import type { ChordPosition, LyricLine, ParsedTtml } from '~/types'
 import { parseTtml, findActiveLineIndex } from '~/composables/useTtmlParser'
 import { serializeTtml } from '~/composables/useTtmlSerializer'
 
@@ -44,11 +44,11 @@ const lineProgress = computed(() => {
   if (duration <= 0) return 0
   return Math.min(100, Math.max(0, ((currentTimeMs.value - line.beginMs) / duration) * 100))
 })
-const hasChords = computed(() => lines.value.some((l) => l.words.some((w) => w.chord)))
+const hasChords = computed(() => lines.value.some((l) => l.chords.length > 0))
 
 const currentSnapshot = computed(() =>
   JSON.stringify({
-    chords: lines.value.map(l => l.words.map(w => w.chord || '')),
+    chords: lines.value.map(l => l.chords),
     rate: playbackRate.value,
     transposition: transposition.value,
   })
@@ -119,10 +119,10 @@ function onChordsMatched(annotatedLines: LyricLine[], artist: string, song: stri
   if (song) songName.value = song
 }
 
-function onChordsUpdated(lineIndex: number, chords: (string | undefined)[]) {
-  const words = lines.value[lineIndex]?.words
-  if (!words) return
-  words.forEach((w, i) => { w.chord = chords[i] })
+function onChordsUpdated(lineIndex: number, chords: ChordPosition[]) {
+  const line = lines.value[lineIndex]
+  if (!line) return
+  line.chords = chords
 }
 
 function resetSong() {
@@ -146,9 +146,7 @@ function revertChanges() {
   if (!savedSnapshot.value) return
   const { chords, rate, transposition: savedTrans } = JSON.parse(savedSnapshot.value)
   lines.value.forEach((line, i) => {
-    line.words.forEach((word, j) => {
-      word.chord = chords[i]?.[j] || undefined
-    })
+    line.chords = chords[i] ?? []
   })
   playbackRate.value = rate
   playerRef.value?.setRate(rate)

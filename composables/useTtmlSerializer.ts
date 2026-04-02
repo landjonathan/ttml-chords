@@ -30,20 +30,6 @@ const hasRealWordTiming = (line: LyricLine) => {
 }
 
 /**
- * For a line without real word timing, compute a distributed timestamp
- * for the word at the given index. This is used only for chord spans
- * to encode which word a chord belongs to.
- */
-const distributedTime = (line: LyricLine, wordIndex: number) => {
-  const duration = line.endMs - line.beginMs
-  const step = duration / line.words.length
-  return {
-    beginMs: Math.round(line.beginMs + wordIndex * step),
-    endMs: Math.round(line.beginMs + (wordIndex + 1) * step),
-  }
-}
-
-/**
  * Serialize a line's words into <span> elements.
  * Only emits spans for word-timed lines; line-timed lines are handled as plain text.
  */
@@ -58,31 +44,30 @@ const serializeWordSpans = (line: LyricLine) =>
 /**
  * Build the chords <div> containing only lines that have chord annotations.
  * Each <p> mirrors the lyrics line timing; each <span> carries a chord name
- * timed to the word it annotates.
+ * timed to encode its character position within the line text.
  *
- * For word-timed lines, chord spans use the word's real timing.
- * For line-timed lines, chord spans get evenly distributed timing
- * to encode their word position.
+ * Encoding: beginMs = lineBegin + (charIndex / textLength) * duration
  */
 const buildChordsDiv = (lines: LyricLine[]) => {
   const chordPs: string[] = []
 
   for (const line of lines) {
-    const realTiming = hasRealWordTiming(line)
-    const chordSpans: string[] = []
-    line.words.forEach((w, i) => {
-      if (!w.chord) return
-      const t = realTiming ? { beginMs: w.beginMs, endMs: w.endMs } : distributedTime(line, i)
-      chordSpans.push(
-        `        <span begin="${formatTime(t.beginMs)}" end="${formatTime(t.endMs)}">${escapeXml(w.chord)}</span>`
-      )
-    })
-    if (chordSpans.length === 0) continue
+    if (line.chords.length === 0) continue
 
-    const spans = chordSpans.join('\n')
+    const duration = line.endMs - line.beginMs
+    const textLen = Math.max(line.text.length, 1)
+    const step = duration / textLen
+
+    const chordSpans = [...line.chords]
+      .sort((a, b) => a.charIndex - b.charIndex)
+      .map(({ chord, charIndex }) => {
+        const beginMs = Math.round(line.beginMs + charIndex * step)
+        const endMs = Math.round(line.beginMs + (charIndex + 1) * step)
+        return `        <span begin="${formatTime(beginMs)}" end="${formatTime(endMs)}">${escapeXml(chord)}</span>`
+      })
 
     chordPs.push(
-      `      <p begin="${formatTime(line.beginMs)}" end="${formatTime(line.endMs)}">\n${spans}\n      </p>`
+      `      <p begin="${formatTime(line.beginMs)}" end="${formatTime(line.endMs)}">\n${chordSpans.join('\n')}\n      </p>`
     )
   }
 

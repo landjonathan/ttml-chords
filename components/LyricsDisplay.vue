@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
-import type { LyricLine } from '~/types'
+import type { LyricLine, ChordPosition } from '~/types'
 import { findActiveLineIndex } from '~/composables/useTtmlParser'
 import { parse as parseChord, transpose as transposeChord, prettyPrint } from 'chord-magic'
 
@@ -13,98 +13,159 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seekTo: [timeMs: number]
-  chordsUpdated: [lineIndex: number, chords: (string | undefined)[]]
+  chordsUpdated: [lineIndex: number, chords: ChordPosition[]]
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
 const lineRefs = ref<(HTMLDivElement | null)[]>([])
 
 // Chord editing state
-const hoveredChord = ref<{ line: number; word: number } | null>(null)
-const editingChord = ref<{ line: number; word: number } | null>(null)
-const editingOriginWord = ref(-1)
-// Buffered chord state for the line being edited (wordIndex → chord)
-const pendingChords = ref<(string | undefined)[]>([])
+const hoveredChordIdx = ref<{ line: number; charIndex: number } | null>(null)
+const editingChordIdx = ref<{ line: number; charIndex: number } | null>(null)
+const editingOriginCharIdx = ref(-1)
+// Buffered chord state for the line being edited
+const pendingChords = ref<ChordPosition[]>([])
 
-const isChordHovered = (lineIdx: number, wIdx: number) =>
-  hoveredChord.value?.line === lineIdx && hoveredChord.value?.word === wIdx
+const isChordHovered = (lineIdx: number, charIndex: number) =>
+  hoveredChordIdx.value?.line === lineIdx && hoveredChordIdx.value?.charIndex === charIndex
 
-const isChordEditing = (lineIdx: number, wIdx: number) =>
-  editingChord.value?.line === lineIdx && editingChord.value?.word === wIdx
+const isChordEditing = (lineIdx: number, charIndex: number) =>
+  editingChordIdx.value?.line === lineIdx && editingChordIdx.value?.charIndex === charIndex
 
-const showPopover = (lineIdx: number, wIdx: number) =>
-  isChordEditing(lineIdx, wIdx) || isChordHovered(lineIdx, wIdx)
+const showPopover = (lineIdx: number, charIndex: number) =>
+  isChordEditing(lineIdx, charIndex) || isChordHovered(lineIdx, charIndex)
+
+/** Get the effective chords for a line (pending edits or props). */
+const lineChords = (lineIdx: number): ChordPosition[] => {
+  if (editingChordIdx.value?.line === lineIdx && pendingChords.value.length > 0) {
+    return pendingChords.value
+  }
+  return props.lines[lineIdx]?.chords ?? []
+}
 
 const editingDirty = computed(() => {
-  if (!editingChord.value) return false
-  const lineWords = props.lines[editingChord.value.line]?.words
-  if (!lineWords || pendingChords.value.length === 0) return false
-  return lineWords.some((w, i) => (w.chord ?? undefined) !== pendingChords.value[i])
+  if (!editingChordIdx.value) return false
+  const original = props.lines[editingChordIdx.value.line]?.chords
+  if (!original || pendingChords.value.length === 0) return false
+  return JSON.stringify(original) !== JSON.stringify(pendingChords.value)
 })
 
 /** Check if moving in a direction would swap with another chord. */
 const wouldSwap = (direction: -1 | 1) => {
-  if (!editingChord.value || pendingChords.value.length === 0) return false
-  const target = editingChord.value.word + direction
-  if (target < 0 || target >= pendingChords.value.length) return false
-  return !!pendingChords.value[target]
+  if (!editingChordIdx.value || pendingChords.value.length === 0) return false
+  const current = editingChordIdx.value.charIndex
+  const target = current + direction
+  return pendingChords.value.some((c) => c.charIndex === target)
 }
 
-/** Return the chord to display for a word, accounting for pending edits. */
-const wordChord = (lineIdx: number, wIdx: number) => {
-  if (editingChord.value?.line === lineIdx && pendingChords.value.length > 0) {
-    return pendingChords.value[wIdx]
+/**
+ * Build word segments for a line, splitting words at chord boundaries.
+ * Each segment: { text, chord?, charIndex (absolute in line) }
+ */
+interface WordSegment {
+  text: string
+  chord?: string
+  charIndex: number
+}
+
+const buildWordSegments = (lineIdx: number, wordText: string, wordStart: number): WordSegment[] => {
+  const chords = lineChords(lineIdx)
+  // Find chords that fall within this word's character range
+  const wordEnd = wordStart + wordText.length
+  const wordChords = chords
+    .filter((c) => c.charIndex >= wordStart && c.charIndex < wordEnd)
+    .sort((a, b) => a.charIndex - b.charIndex)
+
+  if (wordChords.length === 0) {
+    return [{ text: wordText, charIndex: wordStart }]
   }
-  return props.lines[lineIdx]?.words[wIdx]?.chord
+
+  const segments: WordSegment[] = []
+  let pos = 0
+
+  for (const { chord, charIndex } of wordChords) {
+    const offset = charIndex - wordStart
+    // Text before this chord
+    if (offset > pos) {
+      segments.push({ text: wordText.slice(pos, offset), charIndex: wordStart + pos })
+    }
+    // Segment starting at chord position (extends to next chord or end of word)
+    const nextChordOffset = wordChords.find((c) => c.charIndex > charIndex)
+    const segEnd = nextChordOffset ? nextChordOffset.charIndex - wordStart : wordText.length
+    segments.push({ text: wordText.slice(offset, segEnd), chord, charIndex })
+    pos = segEnd
+  }
+
+  // Remaining text after last chord
+  if (pos < wordText.length) {
+    segments.push({ text: wordText.slice(pos), charIndex: wordStart + pos })
+  }
+
+  return segments
 }
 
-function onChordEnter(lineIdx: number, wIdx: number) {
-  if (editingChord.value) return
-  hoveredChord.value = { line: lineIdx, word: wIdx }
+/** Compute the start character index of a word within the line text. */
+const wordStartIndex = (line: LyricLine, wIdx: number) => {
+  const regex = /\S+/g
+  let match: RegExpExecArray | null
+  let idx = 0
+  while ((match = regex.exec(line.text)) !== null) {
+    if (idx === wIdx) return match.index
+    idx++
+  }
+  // Fallback: accumulate with single-space assumption
+  let pos = 0
+  for (let i = 0; i < wIdx; i++) {
+    pos += line.words[i].text.length + 1
+  }
+  return pos
+}
+
+function onChordEnter(lineIdx: number, charIndex: number) {
+  if (editingChordIdx.value) return
+  hoveredChordIdx.value = { line: lineIdx, charIndex }
 }
 
 function onChordLeave() {
-  if (editingChord.value) return
-  hoveredChord.value = null
+  if (editingChordIdx.value) return
+  hoveredChordIdx.value = null
 }
 
-function startEditing(lineIdx: number, wIdx: number, e: Event) {
+function startEditing(lineIdx: number, charIndex: number, e: Event) {
   e.stopPropagation()
-  editingChord.value = { line: lineIdx, word: wIdx }
-  hoveredChord.value = { line: lineIdx, word: wIdx }
-  editingOriginWord.value = wIdx
-  // Snapshot current chords for this line
-  pendingChords.value = props.lines[lineIdx].words.map((w) => w.chord)
+  editingChordIdx.value = { line: lineIdx, charIndex }
+  hoveredChordIdx.value = { line: lineIdx, charIndex }
+  editingOriginCharIdx.value = charIndex
+  pendingChords.value = props.lines[lineIdx].chords.map((c) => ({ ...c }))
   emit('seekTo', props.lines[lineIdx].beginMs)
 }
 
 function revertEditing(e: Event) {
   e.stopPropagation()
-  if (!editingChord.value) return
-  const lineIdx = editingChord.value.line
-  // Restore original snapshot
-  pendingChords.value = props.lines[lineIdx].words.map((w) => w.chord)
-  editingChord.value = { line: lineIdx, word: editingOriginWord.value }
-  hoveredChord.value = { line: lineIdx, word: editingOriginWord.value }
+  if (!editingChordIdx.value) return
+  const lineIdx = editingChordIdx.value.line
+  pendingChords.value = props.lines[lineIdx].chords.map((c) => ({ ...c }))
+  editingChordIdx.value = { line: lineIdx, charIndex: editingOriginCharIdx.value }
+  hoveredChordIdx.value = { line: lineIdx, charIndex: editingOriginCharIdx.value }
 }
 
 function commitEditing(e: Event) {
   e.stopPropagation()
-  if (editingChord.value && editingDirty.value) {
-    emit('chordsUpdated', editingChord.value.line, [...pendingChords.value])
+  if (editingChordIdx.value && editingDirty.value) {
+    emit('chordsUpdated', editingChordIdx.value.line, [...pendingChords.value])
   }
-  editingChord.value = null
-  hoveredChord.value = null
+  editingChordIdx.value = null
+  hoveredChordIdx.value = null
   pendingChords.value = []
 }
 
 function onClickOutside(e: MouseEvent) {
-  if (!editingChord.value) return
+  if (!editingChordIdx.value) return
   if (editingDirty.value) return
   const target = e.target as HTMLElement
   if (target.closest('.chord-popover') || target.closest('.chord-editing')) return
-  editingChord.value = null
-  hoveredChord.value = null
+  editingChordIdx.value = null
+  hoveredChordIdx.value = null
   pendingChords.value = []
 }
 
@@ -113,20 +174,24 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onClickOutside
 
 function moveChord(direction: -1 | 1, e: Event) {
   e.stopPropagation()
-  if (!editingChord.value) return
-  const { line, word } = editingChord.value
-  const target = word + direction
-  const lineWords = props.lines[line]?.words
-  if (!lineWords || target < 0 || target >= lineWords.length) return
+  if (!editingChordIdx.value) return
+  const { line, charIndex } = editingChordIdx.value
+  const textLen = props.lines[line]?.text.length ?? 0
+  const target = charIndex + direction
+  if (target < 0 || target >= textLen) return
 
-  // Recompute from original: only the edited chord moves, everything else stays in place
-  const original = lineWords.map((w) => w.chord)
-  pendingChords.value = [...original]
-  pendingChords.value[editingOriginWord.value] = original[target]
-  pendingChords.value[target] = original[editingOriginWord.value]
+  // Recompute from original: only the edited chord moves
+  const original = props.lines[line].chords.map((c) => ({ ...c }))
+  const existing = original.find((c) => c.charIndex === target)
 
-  editingChord.value = { line, word: target }
-  hoveredChord.value = { line, word: target }
+  pendingChords.value = original.map((c) => {
+    if (c.charIndex === editingOriginCharIdx.value) return { ...c, charIndex: target }
+    if (existing && c.charIndex === target) return { ...c, charIndex: editingOriginCharIdx.value }
+    return { ...c }
+  })
+
+  editingChordIdx.value = { line, charIndex: target }
+  hoveredChordIdx.value = { line, charIndex: target }
 }
 
 const activeLineIndex = computed(() =>
@@ -171,7 +236,7 @@ function getLineClass(line: LyricLine, index: number): string {
 }
 
 function hasChords(line: LyricLine): boolean {
-  return line.words.some((w) => !!w.chord)
+  return line.chords.length > 0
 }
 
 const displayChord = (chord: string) => {
@@ -182,7 +247,7 @@ const displayChord = (chord: string) => {
 }
 
 function onLineClick(line: LyricLine) {
-  if (editingChord.value) return
+  if (editingChordIdx.value) return
   emit('seekTo', line.beginMs)
 }
 
@@ -203,34 +268,37 @@ function setLineRef(el: unknown, index: number) {
       @click="onLineClick(line)"
     >
       <!-- Line with chords -->
-      <template v-if="hasChords(line)">
+      <template v-if="hasChords(line) || lineChords(index).length > 0">
         <span
           v-for="(word, wIdx) in line.words"
           :key="wIdx"
-          class="word"
-          :class="{ 'word-has-chord': !!wordChord(index, wIdx) }"
+          class="word word-has-chord"
         >
-          <span
-            v-if="wordChord(index, wIdx)"
-            class="chord-label"
-            :class="{ 'chord-interactive': true, 'chord-editing': isChordEditing(index, wIdx) }"
-            @mouseenter="onChordEnter(index, wIdx)"
-            @mouseleave="onChordLeave"
-          >
-            {{ displayChord(wordChord(index, wIdx)!) }}
+          <template v-for="(seg, sIdx) in buildWordSegments(index, word.text, wordStartIndex(line, wIdx))" :key="sIdx">
+            <span v-if="seg.chord" class="segment-with-chord">
+              <span
+                class="chord-label chord-interactive"
+                :class="{ 'chord-editing': isChordEditing(index, seg.charIndex) }"
+                @mouseenter="onChordEnter(index, seg.charIndex)"
+                @mouseleave="onChordLeave"
+              >
+                {{ displayChord(seg.chord) }}
 
-            <!-- Popover -->
-            <span v-if="showPopover(index, wIdx)" class="chord-popover" @click.stop>
-              <template v-if="isChordEditing(index, wIdx)">
-                <button v-if="editingDirty" class="pop-btn pop-revert" @click="revertEditing($event)">✕</button>
-                <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(-1) }" :disabled="wIdx === 0" @click="moveChord(-1, $event)">{{ wouldSwap(-1) ? '⇆' : '‹' }}</button>
-                <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(1) }" :disabled="wIdx === line.words.length - 1" @click="moveChord(1, $event)">{{ wouldSwap(1) ? '⇆' : '›' }}</button>
-                <button v-if="editingDirty" class="pop-btn pop-done" @click="commitEditing($event)">✓</button>
-              </template>
-              <button v-else class="pop-btn" @click="startEditing(index, wIdx, $event)">✎</button>
+                <!-- Popover -->
+                <span v-if="showPopover(index, seg.charIndex)" class="chord-popover" @click.stop>
+                  <template v-if="isChordEditing(index, seg.charIndex)">
+                    <button v-if="editingDirty" class="pop-btn pop-revert" @click="revertEditing($event)">✕</button>
+                    <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(-1) }" :disabled="seg.charIndex === 0" @click="moveChord(-1, $event)">{{ wouldSwap(-1) ? '⇆' : '‹' }}</button>
+                    <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(1) }" :disabled="seg.charIndex >= line.text.length - 1" @click="moveChord(1, $event)">{{ wouldSwap(1) ? '⇆' : '›' }}</button>
+                    <button v-if="editingDirty" class="pop-btn pop-done" @click="commitEditing($event)">✓</button>
+                  </template>
+                  <button v-else class="pop-btn" @click="startEditing(index, seg.charIndex, $event)">✎</button>
+                </span>
+              </span>
+              <span class="word-text">{{ seg.text }}</span>
             </span>
-          </span>
-          <span class="word-text">{{ word.text }}</span>
+            <span v-else class="word-text">{{ seg.text }}</span>
+          </template>
         </span>
       </template>
 
@@ -333,6 +401,10 @@ function setLineRef(el: unknown, index: number) {
 .word-has-chord {
   position: relative;
   padding-top: 0.7em;
+}
+
+.segment-with-chord {
+  display: inline;
 }
 
 .chord-label {

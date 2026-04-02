@@ -1,4 +1,4 @@
-import type { LyricLine, LyricWord, ParsedTtml } from '~/types'
+import type { ChordPosition, LyricLine, LyricWord, ParsedTtml } from '~/types'
 
 /**
  * Parse a TTML time string to milliseconds.
@@ -59,7 +59,7 @@ function getTextContent(el: Element): string {
 
 /**
  * Look for a <div ttm:agent="chords"> section and apply chord annotations
- * to the matching lyrics words by timing.
+ * to the matching lyrics lines as character-level positions.
  */
 function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
   const divs = Array.from(doc.getElementsByTagNameNS('*', 'div'))
@@ -74,14 +74,13 @@ function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
   if (chordPs.length === 0) return false
 
   // Build a lookup: lineBeginMs -> chord spans (in document order)
-  const chordsByLine = new Map<number, { beginMs: number; endMs: number; chord: string }[]>()
+  const chordsByLine = new Map<number, { beginMs: number; chord: string }[]>()
   for (const p of chordPs) {
     const lineBegin = parseTime(p.getAttribute('begin'))
     const spans = Array.from(p.getElementsByTagNameNS('*', 'span'))
     const chords = spans
       .map((s) => ({
         beginMs: parseTime(s.getAttribute('begin')),
-        endMs: parseTime(s.getAttribute('end')),
         chord: s.textContent?.trim() || '',
       }))
       .filter((c) => c.chord)
@@ -90,53 +89,25 @@ function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
 
   if (chordsByLine.size === 0) return false
 
-  // Match chords to lyrics words
+  // Decode charIndex from chord span timing
   for (const line of lines) {
     const chords = chordsByLine.get(line.beginMs)
     if (!chords) continue
 
-    // If the line has word-level timing, match by timestamp
-    if (line.words.length > 0) {
-      const used = new Set<number>()
-      for (const { beginMs, endMs, chord } of chords) {
-        let bestIdx = -1
-        let bestDist = Infinity
-        for (let i = 0; i < line.words.length; i++) {
-          if (used.has(i)) continue
-          const dist = Math.abs(line.words[i].beginMs - beginMs) + Math.abs(line.words[i].endMs - endMs)
-          if (dist < bestDist) {
-            bestDist = dist
-            bestIdx = i
-          }
-        }
-        if (bestIdx >= 0) {
-          line.words[bestIdx].chord = chord
-          used.add(bestIdx)
-        }
-      }
-      continue
-    }
-
-    // Line has no word-level timing — synthesize words from text,
-    // derive word index from chord position within line time range
-    const textWords = line.text.split(/\s+/).filter(Boolean)
-    if (textWords.length === 0) continue
-
     const duration = line.endMs - line.beginMs
-    const words: LyricWord[] = textWords.map((text) => ({
-      text,
-      beginMs: line.beginMs,
-      endMs: line.endMs,
-    }))
+    const textLen = line.text.length
+    if (textLen === 0) continue
 
     for (const { beginMs, chord } of chords) {
-      // Reverse the distribution: wordIndex = position within line range
       const fraction = duration > 0 ? (beginMs - line.beginMs) / duration : 0
-      const idx = Math.min(Math.floor(fraction * textWords.length), textWords.length - 1)
-      words[idx].chord = chord
+      const charIndex = Math.min(
+        Math.round(fraction * textLen),
+        textLen - 1,
+      )
+      if (!line.chords.some((c) => c.charIndex === charIndex)) {
+        line.chords.push({ chord, charIndex })
+      }
     }
-
-    line.words = words
   }
 
   return true
@@ -253,6 +224,7 @@ export function parseTtml(xml: string): ParsedTtml {
         beginMs,
         endMs,
         words,
+        chords: [],
         isBackground,
       })
     }
@@ -267,6 +239,7 @@ export function parseTtml(xml: string): ParsedTtml {
           beginMs: bgWords[0].beginMs,
           endMs: bgWords[bgWords.length - 1].endMs,
           words: bgWords,
+          chords: [],
           isBackground: true,
         })
       }
@@ -297,6 +270,17 @@ export function parseTtml(xml: string): ParsedTtml {
 
   // Extract chords from agent div
   const hasChords = applyChordsFromAgent(doc, lines)
+
+  // Ensure lines with chords have words for rendering
+  for (const line of lines) {
+    if (line.chords.length > 0 && line.words.length === 0) {
+      line.words = line.text.split(/\s+/).filter(Boolean).map((text) => ({
+        text,
+        beginMs: line.beginMs,
+        endMs: line.endMs,
+      }))
+    }
+  }
 
   return { lines, timing, lang, songName, artistName, hasChords, playbackRate, transposition }
 }

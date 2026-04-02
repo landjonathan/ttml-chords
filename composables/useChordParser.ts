@@ -1,4 +1,4 @@
-import type { UgChordLine, UgChordPosition } from '~/types'
+import type { ChordPosition, UgChordLine, UgChordPosition } from '~/types'
 
 /**
  * Check if a line contains [ch]...[/ch] chord tags.
@@ -132,50 +132,83 @@ export function parseUgContent(content: string): UgChordLine[] {
 }
 
 /**
- * Given a lyrics line and chord positions, map each chord to the word
- * that starts at or contains that character position.
- * Returns an array of { wordIndex, chord } assignments.
+ * Build word boundaries for a text string.
  */
-export function mapChordsToWords(
-  lyrics: string,
-  chords: UgChordPosition[],
-): { wordIndex: number; chord: string }[] {
-  // Build word boundaries
-  const words: { start: number; end: number; text: string }[] = []
+const buildWordBounds = (text: string) => {
+  const words: { start: number; end: number }[] = []
   const regex = /\S+/g
   let match: RegExpExecArray | null
-  while ((match = regex.exec(lyrics)) !== null) {
-    words.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      text: match[0],
-    })
+  while ((match = regex.exec(text)) !== null) {
+    words.push({ start: match.index, end: match.index + match[0].length })
   }
+  return words
+}
 
-  if (words.length === 0) return []
+/**
+ * Map UG chord positions to character indices in the TTML line text.
+ *
+ * Uses word alignment between the two texts: for each UG chord at `charPosition`,
+ * find which UG word owns it, compute fractional offset within that word,
+ * and map to the corresponding TTML word's character range.
+ * Chords in inter-word whitespace snap to the start of the nearest word.
+ */
+export function mapChordsToCharPositions(
+  ttmlText: string,
+  ugLyrics: string,
+  ugChords: UgChordPosition[],
+): ChordPosition[] {
+  const ugWords = buildWordBounds(ugLyrics)
+  const ttmlWords = buildWordBounds(ttmlText)
+  if (ugWords.length === 0 || ttmlWords.length === 0) return []
 
-  return chords
+  return ugChords
     .map(({ chord, charPosition }) => {
-      // Find the word whose range contains or is closest to charPosition
-      let bestIdx = 0
-      let bestDist = Infinity
-      for (let w = 0; w < words.length; w++) {
-        const word = words[w]
-        if (charPosition >= word.start && charPosition < word.end) {
-          return { wordIndex: w, chord }
-        }
-        // Distance to word start
-        const dist = Math.abs(charPosition - word.start)
-        if (dist < bestDist) {
-          bestDist = dist
-          bestIdx = w
+      // Find which UG word owns this chord position
+      let ugWordIdx = -1
+      let offsetInWord = 0
+      for (let w = 0; w < ugWords.length; w++) {
+        if (charPosition >= ugWords[w].start && charPosition < ugWords[w].end) {
+          ugWordIdx = w
+          offsetInWord = charPosition - ugWords[w].start
+          break
         }
       }
-      return { wordIndex: bestIdx, chord }
+
+      // Chord is in whitespace — snap to nearest word start
+      if (ugWordIdx === -1) {
+        let bestDist = Infinity
+        for (let w = 0; w < ugWords.length; w++) {
+          const dist = Math.abs(charPosition - ugWords[w].start)
+          if (dist < bestDist) {
+            bestDist = dist
+            ugWordIdx = w
+          }
+        }
+        offsetInWord = 0
+      }
+
+      // Map to corresponding TTML word (proportional if counts differ)
+      const ttmlWordIdx = Math.min(
+        Math.round((ugWordIdx / ugWords.length) * ttmlWords.length),
+        ttmlWords.length - 1,
+      )
+      const ttmlWord = ttmlWords[ttmlWordIdx]
+      const ugWord = ugWords[ugWordIdx]
+      const ugWordLen = ugWord.end - ugWord.start
+      const ttmlWordLen = ttmlWord.end - ttmlWord.start
+
+      // Proportional offset within the TTML word
+      const fraction = ugWordLen > 0 ? offsetInWord / ugWordLen : 0
+      const charIndex = ttmlWord.start + Math.min(
+        Math.round(fraction * ttmlWordLen),
+        ttmlWordLen - 1,
+      )
+
+      return { chord, charIndex }
     })
     .filter(
-      // Deduplicate: keep only the first chord per word
+      // Deduplicate: keep only the first chord per charIndex
       (item, idx, arr) =>
-        arr.findIndex((x) => x.wordIndex === item.wordIndex) === idx,
+        arr.findIndex((x) => x.charIndex === item.charIndex) === idx,
     )
 }

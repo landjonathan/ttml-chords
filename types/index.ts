@@ -2,7 +2,11 @@ export interface LyricWord {
   text: string
   beginMs: number
   endMs: number
-  chord?: string
+}
+
+export interface ChordPosition {
+  chord: string
+  charIndex: number
 }
 
 export interface LyricLine {
@@ -11,6 +15,7 @@ export interface LyricLine {
   beginMs: number
   endMs: number
   words: LyricWord[]
+  chords: ChordPosition[]
   isBackground: boolean
 }
 
