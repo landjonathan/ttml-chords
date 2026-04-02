@@ -176,9 +176,13 @@ function moveChord(direction: -1 | 1, e: Event) {
   e.stopPropagation()
   if (!editingChordIdx.value) return
   const { line, charIndex } = editingChordIdx.value
-  const textLen = props.lines[line]?.text.length ?? 0
-  const target = charIndex + direction
-  if (target < 0 || target >= textLen) return
+  const text = props.lines[line]?.text ?? ''
+  let target = charIndex + direction
+  // Skip whitespace so the chord lands on a word character
+  while (target >= 0 && target < text.length && /\s/.test(text[target])) {
+    target += direction
+  }
+  if (target < 0 || target >= text.length) return
 
   // Recompute from original: only the edited chord moves
   const original = props.lines[line].chords.map((c) => ({ ...c }))
