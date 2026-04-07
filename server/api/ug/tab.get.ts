@@ -13,12 +13,15 @@ export default defineEventHandler(async (event) => {
       `/tab/info?tab_id=${encodeURIComponent(id)}&tab_access_type=public`,
     )) as Record<string, unknown>
 
+    console.log(JSON.stringify(data, null, 2))
+
     const content = data.content
     if (!content || typeof content !== 'string') {
       throw createError({ statusCode: 404, statusMessage: 'No tab content found' })
     }
 
-    return { content }
+    const url = typeof data.urlWeb === 'string' ? data.urlWeb : ''
+    return { content, url }
   } catch (e) {
     if ((e as any).statusCode) throw e
 
