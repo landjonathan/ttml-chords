@@ -25,6 +25,8 @@ const editingChordIdx = ref<{ line: number; charIndex: number } | null>(null)
 const editingOriginCharIdx = ref(-1)
 // Buffered chord state for the line being edited
 const pendingChords = ref<ChordPosition[]>([])
+const isMoveMode = ref(false)
+const moveModeOriginCharIdx = ref(-1)
 
 const isChordHovered = (lineIdx: number, charIndex: number) =>
   hoveredChordIdx.value?.line === lineIdx && hoveredChordIdx.value?.charIndex === charIndex
@@ -161,31 +163,35 @@ function commitEditing(e: Event) {
 
 function onClickOutside(e: MouseEvent) {
   if (!editingChordIdx.value) return
-  if (editingDirty.value) return
   const target = e.target as HTMLElement
   if (target.closest('.chord-popover') || target.closest('.chord-editing')) return
+  if (isMoveMode.value) {
+    cancelMoveMode()
+    editingChordIdx.value = null
+    hoveredChordIdx.value = null
+    pendingChords.value = []
+    return
+  }
+  if (editingDirty.value) return
   editingChordIdx.value = null
   hoveredChordIdx.value = null
   pendingChords.value = []
 }
 
-onMounted(() => document.addEventListener('pointerdown', onClickOutside))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', onClickOutside))
+onMounted(() => {
+  document.addEventListener('pointerdown', onClickOutside)
+  document.addEventListener('mousemove', onDocumentMouseMove)
+  document.addEventListener('keydown', onKeyDown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onClickOutside)
+  document.removeEventListener('mousemove', onDocumentMouseMove)
+  document.removeEventListener('keydown', onKeyDown)
+})
 
-function moveChord(direction: -1 | 1, e: Event) {
-  e.stopPropagation()
-  if (!editingChordIdx.value) return
-  const { line, charIndex } = editingChordIdx.value
-  const text = props.lines[line]?.text ?? ''
-  let target = charIndex + direction
-  // Skip whitespace so the chord lands on a word character
-  while (target >= 0 && target < text.length && /\s/.test(text[target])) {
-    target += direction
-  }
-  if (target < 0 || target >= text.length) return
-
-  // Recompute from original: only the edited chord moves
-  const original = props.lines[line].chords.map((c) => ({ ...c }))
+/** Move the editing chord to a specific charIndex, updating pending state. */
+function moveChordTo (lineIdx: number, target: number) {
+  const original = props.lines[lineIdx].chords.map((c) => ({ ...c }))
   const existing = original.find((c) => c.charIndex === target)
 
   pendingChords.value = original.map((c) => {
@@ -194,8 +200,136 @@ function moveChord(direction: -1 | 1, e: Event) {
     return { ...c }
   })
 
-  editingChordIdx.value = { line, charIndex: target }
-  hoveredChordIdx.value = { line, charIndex: target }
+  editingChordIdx.value = { line: lineIdx, charIndex: target }
+  hoveredChordIdx.value = { line: lineIdx, charIndex: target }
+}
+
+function moveChord(direction: -1 | 1, e: Event) {
+  e.stopPropagation()
+  if (!editingChordIdx.value) return
+  const { line, charIndex } = editingChordIdx.value
+  const text = props.lines[line]?.text ?? ''
+  let target = charIndex + direction
+  while (target >= 0 && target < text.length && /\s/.test(text[target])) {
+    target += direction
+  }
+  if (target < 0 || target >= text.length) return
+  moveChordTo(line, target)
+}
+
+/** Resolve a clientX position to a charIndex within a line. */
+function charIndexFromX (lineIdx: number, clientX: number): number | null {
+  const lineEl = lineRefs.value[lineIdx]
+  const line = props.lines[lineIdx]
+  if (!lineEl || !line) return null
+
+  const wordEls = Array.from(lineEl.querySelectorAll('.word'))
+  const wordCount = Math.min(wordEls.length, line.words.length)
+
+  for (let w = 0; w < wordCount; w++) {
+    const rect = wordEls[w].getBoundingClientRect()
+    if (clientX >= rect.left && clientX <= rect.right) {
+      const ws = wordStartIndex(line, w)
+      const wLen = line.words[w].text.length
+      if (wLen === 0) return ws
+      const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+      return ws + Math.min(Math.round(fraction * (wLen - 1)), wLen - 1)
+    }
+  }
+
+  // Cursor between or outside words — find nearest
+  let bestDist = Infinity
+  let bestWIdx = 0
+  for (let w = 0; w < wordCount; w++) {
+    const rect = wordEls[w].getBoundingClientRect()
+    const dist = clientX < rect.left ? rect.left - clientX : clientX - rect.right
+    if (dist < bestDist) {
+      bestDist = dist
+      bestWIdx = w
+    }
+  }
+  const rect = wordEls[bestWIdx].getBoundingClientRect()
+  const ws = wordStartIndex(line, bestWIdx)
+  const wLen = line.words[bestWIdx].text.length
+  if (clientX <= rect.left) return ws
+  return ws + Math.max(wLen - 1, 0)
+}
+
+/** Clamp a target charIndex so it stays strictly between its neighbours. */
+function clampBetweenChords (target: number, lineIdx: number): number {
+  const currentCharIndex = editingChordIdx.value?.charIndex ?? -1
+  const others = pendingChords.value
+    .filter((c) => c.charIndex !== currentCharIndex)
+    .map((c) => c.charIndex)
+    .sort((a, b) => a - b)
+
+  let lower = 0
+  let upper = props.lines[lineIdx].text.length - 1
+  for (const ci of others) {
+    if (ci < target) lower = Math.max(lower, ci + 1)
+    else {
+      upper = Math.min(upper, ci - 1)
+      break
+    }
+  }
+  return Math.max(lower, Math.min(upper, target))
+}
+
+/** Move the editing chord to target charIndex without swapping (used by move mode). */
+function moveChordPosition (target: number) {
+  if (!editingChordIdx.value) return
+  const lineIdx = editingChordIdx.value.line
+  const currentCharIndex = editingChordIdx.value.charIndex
+  pendingChords.value = pendingChords.value.map((c) =>
+    c.charIndex === currentCharIndex ? { ...c, charIndex: target } : { ...c },
+  )
+  editingChordIdx.value = { line: lineIdx, charIndex: target }
+  hoveredChordIdx.value = { line: lineIdx, charIndex: target }
+}
+
+function enterMoveMode (e: Event) {
+  e.stopPropagation()
+  if (!editingChordIdx.value) return
+  moveModeOriginCharIdx.value = editingChordIdx.value.charIndex
+  isMoveMode.value = true
+}
+
+function exitMoveMode (e: Event) {
+  e.stopPropagation()
+  isMoveMode.value = false
+}
+
+function cancelMoveMode () {
+  if (!isMoveMode.value || !editingChordIdx.value) return
+  moveChordPosition(moveModeOriginCharIdx.value)
+  isMoveMode.value = false
+}
+
+function onDocumentMouseMove (e: MouseEvent) {
+  if (!isMoveMode.value || !editingChordIdx.value) return
+  const lineIdx = editingChordIdx.value.line
+  const raw = charIndexFromX(lineIdx, e.clientX)
+  if (raw === null) return
+
+  const text = props.lines[lineIdx]?.text ?? ''
+  let target = raw
+  if (target >= 0 && target < text.length && /\s/.test(text[target])) {
+    let left = target, right = target
+    while (left >= 0 && /\s/.test(text[left])) left--
+    while (right < text.length && /\s/.test(text[right])) right++
+    target = (raw - left <= right - raw && left >= 0) ? left : (right < text.length ? right : left)
+  }
+  if (target < 0 || target >= text.length) return
+
+  const clamped = clampBetweenChords(target, lineIdx)
+  if (clamped === editingChordIdx.value.charIndex) return
+  moveChordPosition(clamped)
+}
+
+function onKeyDown (e: KeyboardEvent) {
+  if (e.key === 'Escape' && isMoveMode.value) {
+    cancelMoveMode()
+  }
 }
 
 const activeLineIndex = computed(() =>
@@ -282,7 +416,7 @@ function setLineRef(el: unknown, index: number) {
             <span v-if="seg.chord" class="segment-with-chord">
               <span
                 class="chord-label chord-interactive"
-                :class="{ 'chord-editing': isChordEditing(index, seg.charIndex) }"
+                :class="{ 'chord-editing': isChordEditing(index, seg.charIndex), 'chord-moving': isMoveMode && isChordEditing(index, seg.charIndex) }"
                 @mouseenter="onChordEnter(index, seg.charIndex)"
                 @mouseleave="onChordLeave"
               >
@@ -291,10 +425,19 @@ function setLineRef(el: unknown, index: number) {
                 <!-- Popover -->
                 <span v-if="showPopover(index, seg.charIndex)" class="chord-popover" @click.stop>
                   <template v-if="isChordEditing(index, seg.charIndex)">
-                    <button v-if="editingDirty" class="pop-btn pop-revert" @click="revertEditing($event)">✕</button>
-                    <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(-1) }" :disabled="seg.charIndex === 0" @click="moveChord(-1, $event)">{{ wouldSwap(-1) ? '⇆' : '‹' }}</button>
-                    <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(1) }" :disabled="seg.charIndex >= line.text.length - 1" @click="moveChord(1, $event)">{{ wouldSwap(1) ? '⇆' : '›' }}</button>
-                    <button v-if="editingDirty" class="pop-btn pop-done" @click="commitEditing($event)">✓</button>
+                    <template v-if="isMoveMode">
+                      <button class="pop-btn pop-move-confirm" @click="exitMoveMode($event)">✓</button>
+                    </template>
+                    <template v-else>
+                      <button v-if="editingDirty" class="pop-btn pop-revert" @click="revertEditing($event)">✕</button>
+                      <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(-1) }" :disabled="seg.charIndex === 0"
+                              @click="moveChord(-1, $event)">{{ wouldSwap(-1) ? '⇆' : '‹' }}</button>
+                      <button class="pop-btn" :class="{ 'pop-swap': wouldSwap(1) }"
+                              :disabled="seg.charIndex >= line.text.length - 1"
+                              @click="moveChord(1, $event)">{{ wouldSwap(1) ? '⇆' : '›' }}</button>
+                      <button class="pop-btn pop-move" @click="enterMoveMode($event)">⇔</button>
+                      <button v-if="editingDirty" class="pop-btn pop-done" @click="commitEditing($event)">✓</button>
+                    </template>
                   </template>
                   <button v-else class="pop-btn" @click="startEditing(index, seg.charIndex, $event)">✎</button>
                 </span>
@@ -449,6 +592,7 @@ function setLineRef(el: unknown, index: number) {
   padding: 0 2px;
   margin: -1px -2px;
   transition: background 0.15s;
+  touch-action: none;
 }
 
 .chord-label.chord-interactive:hover {
@@ -457,6 +601,11 @@ function setLineRef(el: unknown, index: number) {
 
 .chord-label.chord-editing {
   background: rgba(90, 200, 250, 0.2);
+  cursor: default;
+}
+
+.chord-label.chord-moving {
+  cursor: crosshair;
 }
 
 .chord-popover {
@@ -521,6 +670,19 @@ function setLineRef(el: unknown, index: number) {
 
 .pop-done:hover {
   background: rgba(48, 209, 88, 0.15);
+}
+
+.pop-move {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}
+
+.pop-move-confirm {
+  color: #5ac8fa;
+}
+
+.pop-move-confirm:hover {
+  background: rgba(90, 200, 250, 0.15);
 }
 
 .line.past .chord-label {
