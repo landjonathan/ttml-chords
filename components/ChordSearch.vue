@@ -72,12 +72,10 @@ async function selectTab(tab: UgSearchResult) {
 
     const annotatedLines = matchChordsToTtml(props.lines, ugLines)
     matchedTabName.value = `${tab.artist_name} – ${tab.song_name}`
-    // Use tab metadata if user fields are empty, otherwise keep user input
-    const finalArtist = artist.value.trim() || tab.artist_name
-    const finalSong = song.value.trim() || tab.song_name
-    artist.value = finalArtist
-    song.value = finalSong
-    emit('chordsMatched', annotatedLines, finalArtist, finalSong, data.url || tab.url)
+    // Always use the canonical names from the UG tab (correct casing, spelling, etc.)
+    artist.value = tab.artist_name
+    song.value = tab.song_name
+    emit('chordsMatched', annotatedLines, tab.artist_name, tab.song_name, data.url || tab.url)
     searchResults.value = []
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to fetch chords'
