@@ -262,12 +262,14 @@ export function parseTtml(xml: string): ParsedTtml {
   let playbackRate: number | undefined
   let transposition: number | undefined
   let sourceUrl: string | undefined
+  let albumCover: string | undefined
   for (const item of Array.from(itemEls)) {
     const name = item.getAttribute('name')
     const val = parseFloat(item.textContent?.trim() || '')
     if (name === 'playbackRate' && !isNaN(val) && val > 0) playbackRate = val
     if (name === 'transposition' && !isNaN(val)) transposition = val
     if (name === 'sourceUrl') sourceUrl = item.textContent?.trim() || undefined
+    if (name === 'albumCover') albumCover = item.textContent?.trim() || undefined
   }
 
   // Extract chords from agent div
@@ -284,7 +286,7 @@ export function parseTtml(xml: string): ParsedTtml {
     }
   }
 
-  return { lines, timing, lang, songName, artistName, hasChords, playbackRate, transposition, sourceUrl }
+  return { lines, timing, lang, songName, artistName, hasChords, playbackRate, transposition, sourceUrl, albumCover }
 }
 
 /**

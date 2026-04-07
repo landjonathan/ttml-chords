@@ -33,7 +33,9 @@ export default defineEventHandler(async (event) => {
     }
 
     const url = typeof data.urlWeb === 'string' ? data.urlWeb : ''
-    return { content, url }
+    const appAlbumCover = (data.album_cover as any)?.app_album_cover
+    const albumCover = typeof appAlbumCover?.small === 'string' ? appAlbumCover.small : ''
+    return { content, url, albumCover }
   } catch (e) {
     if ((e as any).statusCode) throw e
 

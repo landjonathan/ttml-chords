@@ -17,6 +17,7 @@ const transposition = ref(0)
 const songName = ref('')
 const artistName = ref('')
 const sourceUrl = ref('')
+const albumCover = ref('')
 const hasEmbeddedChords = ref(false)
 const showLibrary = ref(false)
 const libraryRef = ref<{ loadSongs: () => void } | null>(null)
@@ -74,6 +75,7 @@ function loadTtml(content: string) {
     songName.value = result.songName || ''
     artistName.value = result.artistName || ''
     sourceUrl.value = result.sourceUrl || ''
+    albumCover.value = result.albumCover || ''
     hasEmbeddedChords.value = result.hasChords
     parsedTtml.value = result
     if (result.playbackRate) {
@@ -115,11 +117,12 @@ function onSeekTo(ms: number) {
   currentTimeMs.value = ms
 }
 
-function onChordsMatched (annotatedLines: LyricLine[], artist: string, song: string, url: string) {
+function onChordsMatched (annotatedLines: LyricLine[], artist: string, song: string, url: string, cover: string) {
   lines.value = annotatedLines
   if (artist) artistName.value = artist
   if (song) songName.value = song
   sourceUrl.value = url
+  albumCover.value = cover
 }
 
 function onChordsUpdated(lineIndex: number, chords: ChordPosition[]) {
@@ -135,6 +138,7 @@ function resetSong() {
   songName.value = ''
   artistName.value = ''
   sourceUrl.value = ''
+  albumCover.value = ''
   hasEmbeddedChords.value = false
   parsedTtml.value = null
   showLibrary.value = false
@@ -171,6 +175,7 @@ async function saveSong() {
       playbackRate.value,
       transposition.value,
       sourceUrl.value || undefined,
+      albumCover.value || undefined,
     )
 
     const res = await fetch('/api/songs/save', {
@@ -253,19 +258,26 @@ if (import.meta.client) {
 
       <div class="header-center">
         <template v-if="hasLyrics && (songName || artistName)">
-          <h1 class="song-title">
-            {{ songName }}
-            <a v-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener noreferrer" class="ug-link"
-               title="View on Ultimate Guitar">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                   stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-            </a>
-          </h1>
-          <p v-if="artistName" class="song-artist">{{ artistName }}</p>
+          <div class="song-info">
+            <div class="song-image">
+              <img v-if="albumCover" :src="albumCover" class="album-cover" alt=""/>
+              <a v-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener noreferrer" class="source-link"
+                 title="View on Ultimate Guitar">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+            </div>
+            <div class="song-text">
+              <h1 class="song-title">
+                {{ songName }}
+              </h1>
+              <p v-if="artistName" class="song-artist">{{ artistName }}</p>
+            </div>
+          </div>
         </template>
         <h1 v-else>TTML Chords</h1>
       </div>
@@ -433,6 +445,50 @@ if (import.meta.client) {
   cursor: default;
 }
 
+.song-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.song-image {
+  display: grid;
+  place-content: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  height: 2lh;
+  width: 2lh;
+  border-radius: 6px;
+  overflow: clip;
+
+  > * {
+    grid-area: 1/1/1/1;
+  }
+
+  &:has(img):not(:hover) {
+    .source-link {
+      opacity: 0;
+    }
+  }
+
+  &:hover {
+    .album-cover {
+      opacity: .5;
+    }
+  }
+}
+
+.album-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.song-text {
+  text-align: left;
+}
+
 .song-title {
   font-size: 14px;
   font-weight: 700;
@@ -448,18 +504,13 @@ if (import.meta.client) {
   margin: 2px 0 0;
 }
 
-.ug-link {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  margin-left: 5px;
-  color: rgba(255, 255, 255, 0.25);
+.source-link {
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 1);
   text-decoration: none;
-  transition: color 0.15s;
-}
-
-.ug-link:hover {
-  color: rgba(255, 255, 255, 0.6);
+  z-index: 1;
+  transition: opacity 0.15s;
 }
 
 .app-main {

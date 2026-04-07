@@ -29,6 +29,7 @@ export interface ParsedTtml {
   playbackRate?: number
   transposition?: number
   sourceUrl?: string
+  albumCover?: string
 }
 
 // Ultimate Guitar types
