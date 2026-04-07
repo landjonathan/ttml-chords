@@ -46,6 +46,13 @@ const lineProgress = computed(() => {
   if (duration <= 0) return 0
   return Math.min(100, Math.max(0, ((currentTimeMs.value - line.beginMs) / duration) * 100))
 })
+
+const preRollProgress = computed(() => {
+  if (!lines.value.length) return 0
+  const firstMs = lines.value[0].beginMs
+  if (firstMs <= 0 || currentTimeMs.value <= 0 || currentTimeMs.value >= firstMs) return 0
+  return (currentTimeMs.value / firstMs) * 100
+})
 const hasChords = computed(() => lines.value.some((l) => l.chords.length > 0))
 
 const currentSnapshot = computed(() =>
@@ -227,6 +234,11 @@ if (import.meta.client) {
       class="progress-gradient"
       :style="{ transform: `scaleX(${lineProgress / 100})`, transitionDuration: lineProgress < 3 ? '0s' : '0.15s' }"
     />
+    <div
+      v-if="hasLyrics && isPlaying && preRollProgress > 0"
+      class="progress-gradient progress-preroll"
+      :style="{ transform: `scaleX(${preRollProgress / 100})` }"
+    />
 
     <div v-if="hasLyrics" class="right-sidebar">
       <div v-if="hasChords" class="transpose-controls">
@@ -382,6 +394,10 @@ if (import.meta.client) {
   transform-origin: left;
   will-change: transform;
   transition: transform 0.15s linear;
+}
+
+.progress-preroll {
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.07));
 }
 
 .app-header {
