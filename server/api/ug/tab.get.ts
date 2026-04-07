@@ -1,4 +1,13 @@
+import { writeFileSync, existsSync, mkdirSync } from 'fs'
+import { resolve } from 'path'
 import { ugFetch, UgApiError } from '~/server/utils/ugFetch'
+import { slugify } from '~/server/utils/songs'
+
+const getJsonDir = () => {
+  const dir = resolve(process.cwd(), 'data/json')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -13,7 +22,10 @@ export default defineEventHandler(async (event) => {
       `/tab/info?tab_id=${encodeURIComponent(id)}&tab_access_type=public`,
     )) as Record<string, unknown>
 
-    console.log(JSON.stringify(data, null, 2))
+    const artist = typeof data.artist_name === 'string' ? data.artist_name : ''
+    const song = typeof data.song_name === 'string' ? data.song_name : ''
+    const jsonFilename = `${slugify(artist)}--${slugify(song)}--${id}.json`
+    writeFileSync(resolve(getJsonDir(), jsonFilename), JSON.stringify(data, null, 2), 'utf-8')
 
     const content = data.content
     if (!content || typeof content !== 'string') {
