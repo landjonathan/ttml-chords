@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import type { ChordPosition, LyricLine, ParsedTtml } from '~/types'
 import { parseTtml, findActiveLineIndex } from '~/composables/useTtmlParser'
 import { serializeTtml } from '~/composables/useTtmlSerializer'
+import type { AudioPlayer } from '#components'
 
 const route = useRoute()
 
@@ -168,6 +169,11 @@ function revertChanges() {
   transposition.value = savedTrans ?? 0
 }
 
+function onRateChange(rate: number) {
+  playbackRate.value = rate
+  playerRef.value?.setRate(rate)
+}
+
 async function saveSong() {
   if (!parsedTtml.value || !hasChords.value) return
   if (!artistName.value.trim() || !songName.value.trim()) return
@@ -240,81 +246,28 @@ if (import.meta.client) {
       :style="{ transform: `scaleX(${preRollProgress / 100})` }"
     />
 
-    <div v-if="hasLyrics" class="right-sidebar">
-      <div v-if="hasChords" class="transpose-controls">
-        <button class="transpose-btn" @click="transposeAll(1)">+</button>
-        <span class="transpose-label">{{ transposition === 0 ? '0' : (transposition > 0 ? '+' : '') + transposition }}</span>
-        <button class="transpose-btn" @click="transposeAll(-1)">-</button>
-      </div>
-      <span class="rate-label">{{ playbackRate.toFixed(2) }}x</span>
-      <input
-        type="range"
-        min="0.5"
-        max="2"
-        step="0.05"
-        :value="playbackRate"
-        class="rate-input"
-        orient="vertical"
-        @input="(e: Event) => { playbackRate = parseFloat((e.target as HTMLInputElement).value); playerRef?.setRate(playbackRate) }"
-      />
-    </div>
+    <PlaybackSidebar
+      v-if="hasLyrics"
+      :has-chords="hasChords"
+      :transposition="transposition"
+      :playback-rate="playbackRate"
+      @transpose="transposeAll"
+      @rate-change="onRateChange"
+    />
 
-    <header class="app-header">
-      <button v-if="hasLyrics" class="header-btn header-left" @click="showLibrary = !showLibrary">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
-      </button>
-
-      <div class="header-center">
-        <template v-if="hasLyrics && (songName || artistName)">
-          <div class="song-info">
-            <div class="song-image">
-              <img v-if="albumCover" :src="albumCover" class="album-cover" alt=""/>
-              <a v-if="sourceUrl" :href="sourceUrl" target="_blank" rel="noopener noreferrer" class="source-link"
-                 title="View on Ultimate Guitar">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                     stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/>
-                  <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </a>
-            </div>
-            <div class="song-text">
-              <h1 class="song-title">
-                {{ songName }}
-              </h1>
-              <p v-if="artistName" class="song-artist">{{ artistName }}</p>
-            </div>
-          </div>
-        </template>
-        <h1 v-else>TTML Chords</h1>
-      </div>
-
-      <div v-if="hasChords" class="header-right">
-        <button
-          class="header-btn reset-btn"
-          :disabled="!isDirty || !savedSnapshot"
-          @click="revertChanges"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
-        </button>
-        <button
-          class="header-btn save-btn"
-          :class="{ 'save-dirty': isDirty }"
-          :disabled="!isDirty"
-          @click="saveSong"
-        >
-          Save
-        </button>
-      </div>
-    </header>
+    <AppHeader
+      :has-lyrics="hasLyrics"
+      :has-chords="hasChords"
+      :is-dirty="isDirty"
+      :can-revert="isDirty && !!savedSnapshot"
+      :song-name="songName"
+      :artist-name="artistName"
+      :source-url="sourceUrl"
+      :album-cover="albumCover"
+      @toggle-library="showLibrary = !showLibrary"
+      @save="saveSong"
+      @revert="revertChanges"
+    />
 
     <main class="app-main">
       <!-- Library overlay when toggled from header -->
@@ -400,135 +353,6 @@ if (import.meta.client) {
   background: linear-gradient(to right, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.07));
 }
 
-.app-header {
-  flex-shrink: 0;
-  padding: calc(12px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 12px calc(16px + env(safe-area-inset-left, 0px));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  gap: 12px;
-}
-
-.app-header h1 {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin: 0;
-}
-
-.header-center {
-  flex: 1;
-  text-align: center;
-  min-width: 0;
-}
-
-.header-left {
-  flex-shrink: 0;
-}
-
-.header-right {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.header-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.header-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.header-btn:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-.song-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.song-image {
-  display: grid;
-  place-content: center;
-  background-color: rgba(255, 255, 255, 0.05);
-  height: 2lh;
-  width: 2lh;
-  border-radius: 6px;
-  overflow: clip;
-
-  > * {
-    grid-area: 1/1/1/1;
-  }
-
-  &:has(img):not(:hover) {
-    .source-link {
-      opacity: 0;
-    }
-  }
-
-  &:hover {
-    .album-cover {
-      opacity: .5;
-    }
-  }
-}
-
-.album-cover {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  flex-shrink: 0;
-  transition: opacity 0.15s;
-}
-
-.song-text {
-  text-align: left;
-}
-
-.song-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
-  letter-spacing: 0.02em;
-  text-transform: none;
-  margin: 0;
-}
-
-.song-artist {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
-  margin: 2px 0 0;
-}
-
-.source-link {
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 1);
-  text-decoration: none;
-  z-index: 1;
-  transition: opacity 0.15s;
-}
-
 .app-main {
   flex: 1;
   display: flex;
@@ -576,92 +400,4 @@ if (import.meta.client) {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
 }
 
-.save-btn {
-  background: rgba(90, 200, 250, 0.15);
-  border-color: rgba(90, 200, 250, 0.3);
-  color: #5ac8fa;
-  padding: 6px 14px;
-}
-
-.save-btn:hover:not(:disabled) {
-  background: rgba(90, 200, 250, 0.25);
-}
-
-
-
-.right-sidebar {
-  position: fixed;
-  right: env(safe-area-inset-right, 0px);
-  top: 0;
-  bottom: 0;
-  width: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  z-index: 5;
-}
-
-.transpose-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.transpose-btn {
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  padding: 0;
-}
-
-.transpose-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.transpose-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
-  font-variant-numeric: tabular-nums;
-}
-
-.rate-input {
-  writing-mode: vertical-lr;
-  direction: ltr;
-  height: 60vh;
-  width: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-
-.rate-input::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-}
-
-.rate-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
-  font-variant-numeric: tabular-nums;
-}
 </style>
