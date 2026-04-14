@@ -71,6 +71,7 @@ const isDirty = computed(() => {
 })
 const simulateMode = computed(() => hasLyrics.value && !audioSrc.value)
 const lyricsDuration = computed(() => {
+  if (parsedTtml.value?.totalDurationMs) return parsedTtml.value.totalDurationMs / 1000
   if (!lines.value.length) return 0
   return Math.max(...lines.value.map(l => l.endMs)) / 1000
 })

@@ -262,6 +262,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="el" :class="lineClass" @click="onLineClick">
+    <span v-if="line.songPart" class="song-part-label">{{ line.songPart }}</span>
     <template v-if="hasChords() || lineChords().length > 0">
       <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word word-has-chord">
         <template v-for="(seg, sIdx) in buildWordSegments(word.text, wordStartIndex(wIdx))" :key="sIdx">
@@ -318,8 +319,20 @@ onBeforeUnmount(() => {
 
 
 <style scoped>
+.song-part-label {
+  display: block;
+  font-size: 0.45em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 0.25em;
+  line-height: 1;
+}
+
 .line {
   padding: 8px 0;
+  margin-inline-end: 24px;
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
   font-weight: 700;

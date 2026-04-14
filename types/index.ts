@@ -17,6 +17,8 @@ export interface LyricLine {
   words: LyricWord[]
   chords: ChordPosition[]
   isBackground: boolean
+  /** Set on the first line of a named section (e.g. "Verse 1", "Chorus"). */
+  songPart?: string
 }
 
 export interface ParsedTtml {
@@ -30,6 +32,7 @@ export interface ParsedTtml {
   transposition?: number
   sourceUrl?: string
   albumCover?: string
+  totalDurationMs?: number
 }
 
 // Ultimate Guitar types

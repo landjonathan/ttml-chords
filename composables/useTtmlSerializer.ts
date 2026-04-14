@@ -101,24 +101,44 @@ export const serializeTtml = (parsed: ParsedTtml, artistName?: string, songName?
     `      <ttm:agent xml:id="chords" type="other">\n        <ttm:name>Chords</ttm:name>\n      </ttm:agent>`
   )
 
-  // Lyrics lines
-  const lyricsPs = parsed.lines.map((line) => {
+  // Serialize a single lyrics <p> element
+  const serializeLine = (line: LyricLine) => {
     const attrs = [
       `begin="${formatTime(line.beginMs)}"`,
       `end="${formatTime(line.endMs)}"`,
     ]
     if (line.isBackground) attrs.push(`itunes:key="L2"`)
-
     if (line.words.length > 0 && hasRealWordTiming(line)) {
       return `      <p ${attrs.join(' ')}>\n${serializeWordSpans(line)}\n      </p>`
     }
     return `      <p ${attrs.join(' ')}>${escapeXml(line.text)}</p>`
-  })
+  }
+
+  // Group consecutive lines into sections by songPart.
+  // A line with songPart set starts a new <div>; lines without continue the current one.
+  const divGroups: { songPart?: string; lines: LyricLine[] }[] = []
+  let currentGroup: { songPart?: string; lines: LyricLine[] } | null = null
+  for (const line of parsed.lines) {
+    if (line.songPart !== undefined || currentGroup === null) {
+      currentGroup = { songPart: line.songPart, lines: [] }
+      divGroups.push(currentGroup)
+    }
+    currentGroup.lines.push(line)
+  }
+
+  const lyricsDivs = divGroups
+    .map((group) => {
+      const divAttr = group.songPart ? ` itunes:songPart="${escapeXml(group.songPart)}"` : ''
+      return `    <div${divAttr}>\n${group.lines.map(serializeLine).join('\n')}\n    </div>`
+    })
+    .join('\n')
 
   const chordsDiv = buildChordsDiv(parsed.lines)
 
-  const bodyParts = [`    <div>\n${lyricsPs.join('\n')}\n    </div>`]
+  const bodyParts = [`    <div>\n${lyricsDivs}\n    </div>`]
   if (chordsDiv) bodyParts.push(chordsDiv)
+
+  const bodyDur = parsed.totalDurationMs ? ` dur="${formatTime(parsed.totalDurationMs)}"` : ''
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <tt xmlns="http://www.w3.org/ns/ttml"
@@ -131,7 +151,7 @@ export const serializeTtml = (parsed: ParsedTtml, artistName?: string, songName?
 ${metaParts.join('\n')}
     </metadata>
   </head>
-  <body>
+  <body${bodyDur}>
 ${bodyParts.join('\n')}
   </body>
 </tt>`

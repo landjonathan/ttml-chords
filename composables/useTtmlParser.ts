@@ -146,6 +146,22 @@ export function parseTtml(xml: string): ParsedTtml {
     )
   })
 
+  // Build a map of first-<p>-per-div → itunes:songPart label
+  const firstPSongPart = new Map<Element, string>()
+  for (const div of Array.from(doc.getElementsByTagNameNS('*', 'div'))) {
+    if (
+      div.getAttribute('ttm:agent') === 'chords' ||
+      div.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'agent') === 'chords'
+    ) continue
+    const songPart =
+      div.getAttribute('itunes:songPart') ||
+      div.getAttributeNS('http://music.apple.com/lyric-ttml-internal', 'songPart') ||
+      undefined
+    if (!songPart) continue
+    const firstP = Array.from(div.getElementsByTagNameNS('*', 'p'))[0]
+    if (firstP) firstPSongPart.set(firstP, songPart)
+  }
+
   const lines: LyricLine[] = []
 
   pElements.forEach((p, idx) => {
@@ -226,6 +242,7 @@ export function parseTtml(xml: string): ParsedTtml {
         words,
         chords: [],
         isBackground,
+        songPart: firstPSongPart.get(p),
       })
     }
 
@@ -286,7 +303,27 @@ export function parseTtml(xml: string): ParsedTtml {
     }
   }
 
-  return { lines, timing, lang, songName, artistName, hasChords, playbackRate, transposition, sourceUrl, albumCover }
+  // Extract total song duration from <body> or main <div> (dur or end attribute)
+  let totalDurationMs: number | undefined
+  const bodyEl = doc.getElementsByTagNameNS('*', 'body')[0]
+  if (bodyEl) {
+    const t = parseTime(bodyEl.getAttribute('end')) || parseTime(bodyEl.getAttribute('dur'))
+    if (t > 0) totalDurationMs = t
+  }
+  if (!totalDurationMs) {
+    const allDivs = Array.from(doc.getElementsByTagNameNS('*', 'div'))
+    const mainDiv = allDivs.find(
+      (d) =>
+        d.getAttribute('ttm:agent') !== 'chords' &&
+        d.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'agent') !== 'chords',
+    )
+    if (mainDiv) {
+      const t = parseTime(mainDiv.getAttribute('end')) || parseTime(mainDiv.getAttribute('dur'))
+      if (t > 0) totalDurationMs = t
+    }
+  }
+
+  return { lines, timing, lang, songName, artistName, hasChords, playbackRate, transposition, sourceUrl, albumCover, totalDurationMs }
 }
 
 /**
