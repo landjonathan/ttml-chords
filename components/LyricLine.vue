@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import type { LyricLine, ChordPosition } from '~/types'
 import { parse as parseChord, transpose as transposeChord, prettyPrint } from 'chord-magic'
 
@@ -8,6 +8,7 @@ const props = defineProps<{
   lineIndex: number
   lineClass: string
   transposition: number
+  activeChordCharIndex: number | null
 }>()
 
 const emit = defineEmits<{
@@ -28,6 +29,9 @@ const moveModeOriginCharIndex = ref(-1)
 const isChordHovered = (ci: number) => hoveredCharIndex.value === ci
 const isChordEditing = (ci: number) => editingCharIndex.value === ci
 const showPopover = (ci: number) => isChordEditing(ci) || isChordHovered(ci)
+
+const isChordActive = (ci: number) =>
+  props.activeChordCharIndex === ci && editingCharIndex.value === null
 
 const lineChords = (): ChordPosition[] => {
   if (editingCharIndex.value !== null && pendingChords.value.length > 0) return pendingChords.value
@@ -264,7 +268,7 @@ onBeforeUnmount(() => {
           <span v-if="seg.chord" class="segment-with-chord">
             <span
               class="chord-label chord-interactive"
-              :class="{ 'chord-editing': isChordEditing(seg.charIndex), 'chord-moving': isMoveMode && isChordEditing(seg.charIndex) }"
+              :class="{ 'chord-active': isChordActive(seg.charIndex), 'chord-editing': isChordEditing(seg.charIndex), 'chord-moving': isMoveMode && isChordEditing(seg.charIndex) }"
               @mouseenter="onChordEnter(seg.charIndex)"
               @mouseleave="onChordLeave"
             >
@@ -298,7 +302,7 @@ onBeforeUnmount(() => {
         <span class="segment-with-chord">
           <span
             class="chord-label chord-interactive"
-            :class="{ 'chord-editing': isChordEditing(tc.charIndex) }"
+            :class="{ 'chord-active': isChordActive(tc.charIndex), 'chord-editing': isChordEditing(tc.charIndex) }"
             @mouseenter="onChordEnter(tc.charIndex)"
             @mouseleave="onChordLeave"
           >
@@ -360,6 +364,7 @@ onBeforeUnmount(() => {
   touch-action: none;
 }
 .chord-label.chord-interactive:hover { background: rgba(90, 200, 250, 0.12); }
+.chord-label.chord-active { background: rgba(90, 200, 250, 0.3); }
 .chord-label.chord-editing { background: rgba(90, 200, 250, 0.2); cursor: default; }
 .chord-label.chord-moving { cursor: crosshair; }
 
