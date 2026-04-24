@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import type { LyricLine, ChordPosition } from '~/types'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import type { LyricLine, LyricWord, ChordPosition } from '~/types'
 import { parse as parseChord, transpose as transposeChord, prettyPrint } from 'chord-magic'
 
 const props = defineProps<{
@@ -8,6 +8,7 @@ const props = defineProps<{
   lineIndex: number
   lineClass: string
   transposition: number
+  currentTimeMs: number
   activeChordCharIndex: number | null
 }>()
 
@@ -90,6 +91,22 @@ const displayChord = (chord: string) => {
   const parsed = parseChord(chord)
   if (!parsed) return chord
   return prettyPrint(transposeChord(parsed, props.transposition))
+}
+
+// Distinguish real word-level timings from the synthetic fallback words the
+// parser creates for chord lines that lacked per-word spans in the source.
+const hasWordTiming = computed(() => {
+  const ws = props.line.words
+  if (ws.length === 0) return false
+  return ws.some((w) => w.beginMs !== props.line.beginMs || w.endMs !== props.line.endMs)
+})
+
+const wordStateClass = (word: LyricWord): string => {
+  if (!hasWordTiming.value) return ''
+  const t = props.currentTimeMs
+  if (word.endMs > 0 && t >= word.endMs) return 'word-past'
+  if (t >= word.beginMs) return 'word-active'
+  return 'word-upcoming'
 }
 
 function hasChords(): boolean { return props.line.chords.length > 0 }
@@ -264,7 +281,7 @@ onBeforeUnmount(() => {
   <div ref="el" :class="lineClass" @click="onLineClick">
     <span v-if="line.songPart" class="song-part-label">{{ line.songPart }}</span>
     <template v-if="hasChords() || lineChords().length > 0">
-      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word word-has-chord">
+      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word word-has-chord" :class="wordStateClass(word)">
         <template v-for="(seg, sIdx) in buildWordSegments(word.text, wordStartIndex(wIdx))" :key="sIdx">
           <span v-if="seg.chord" class="segment-with-chord">
             <span
@@ -313,6 +330,9 @@ onBeforeUnmount(() => {
         </span>
       </span>
     </template>
+    <template v-else-if="hasWordTiming">
+      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word" :class="wordStateClass(word)"><span class="word-text">{{ word.text }}</span></span>
+    </template>
     <template v-else>{{ line.text }}</template>
   </div>
 </template>
@@ -355,6 +375,14 @@ onBeforeUnmount(() => {
 .word { display: inline-block; margin-right: 0.25em; }
 .word-has-chord { position: relative; padding-top: 0.7em; }
 .segment-with-chord { position: relative; display: inline; }
+
+/* Progressive word highlighting on the active line. Past/upcoming lines use
+   line-level styling so the progressive effect is only visible while singing.
+   Opacity is applied to .word-text specifically so chord labels keep their
+   own timing-driven highlighting. */
+.line.active .word-upcoming .word-text { opacity: 0.4; transition: opacity 0.2s ease; }
+.line.active .word-active .word-text { opacity: 1; transition: opacity 0.15s ease; }
+.line.active .word-past .word-text { opacity: 0.75; transition: opacity 0.3s ease; }
 
 .chord-label {
   position: absolute;

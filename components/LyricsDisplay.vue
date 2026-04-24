@@ -3,6 +3,53 @@ import { ref, watch, nextTick, computed } from 'vue'
 import type { LyricLine, ChordPosition } from '~/types'
 
 /**
+ * Compute the playback time (ms) at which a chord at the given charIndex
+ * starts. When the line has real word-level timing, the chord is positioned
+ * within its containing word proportionally to its offset within that word;
+ * otherwise we fall back to linear interpolation across the whole line.
+ */
+function chordTimeMs(line: LyricLine, charIndex: number): number {
+  const duration = line.endMs - line.beginMs
+  const textLen = line.text.length
+  const lineFallback = duration > 0 && textLen > 0
+    ? line.beginMs + (charIndex / textLen) * duration
+    : line.beginMs
+
+  const words = line.words
+  if (words.length === 0) return lineFallback
+  const hasWordTiming = words.some(
+    (w) => w.beginMs !== line.beginMs || w.endMs !== line.endMs,
+  )
+  if (!hasWordTiming) return lineFallback
+
+  // Walk words to find the one containing charIndex. Text is `words.join(' ')`
+  // so each word occupies [pos, pos + word.text.length) with a single space
+  // before the next word.
+  let pos = 0
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]
+    const wStart = pos
+    const wEnd = pos + w.text.length
+    if (charIndex < wStart) {
+      // Sits in the gap before this word — snap to its start.
+      return w.beginMs
+    }
+    if (charIndex < wEnd) {
+      const wDur = w.endMs - w.beginMs
+      if (w.text.length === 0 || wDur <= 0) return w.beginMs
+      return w.beginMs + ((charIndex - wStart) / w.text.length) * wDur
+    }
+    if (charIndex === wEnd) {
+      // Boundary (space) — use this word's end.
+      return w.endMs
+    }
+    pos = wEnd + 1 // skip the space separator
+  }
+  // Past the last word — use its end.
+  return words[words.length - 1].endMs
+}
+
+/**
  * Find the active highlight chord at the given time, looking across lines.
  * A chord stays highlighted until the next chord starts, even past its own
  * line's end — unless a chord-less line sits between them (gap rule).
@@ -22,15 +69,10 @@ function findActiveHighlightChord(
     const line = lines[i]
     if (!line.chords.length) return null   // gap line: stop searching
 
-    const duration = line.endMs - line.beginMs
-    const textLen = line.text.length
     const sorted = [...line.chords].sort((a, b) => a.charIndex - b.charIndex)
     let active: ChordPosition | null = null
     for (const c of sorted) {
-      const cbMs = duration > 0 && textLen > 0
-        ? line.beginMs + (c.charIndex / textLen) * duration
-        : line.beginMs
-      if (cbMs <= t) active = c
+      if (chordTimeMs(line, c.charIndex) <= t) active = c
       else break
     }
     if (active) return { lineIndex: i, charIndex: active.charIndex }
@@ -118,6 +160,7 @@ function setLineRef(comp: unknown, index: number) {
       :line-index="index"
       :line-class="getLineClass(line, index)"
       :transposition="transposition"
+      :current-time-ms="currentTimeMs"
       :active-chord-char-index="activeHighlightChord?.lineIndex === index ? activeHighlightChord.charIndex : null"
       @seek-to="emit('seekTo', $event)"
       @chords-updated="(idx, chords) => emit('chordsUpdated', idx, chords)"

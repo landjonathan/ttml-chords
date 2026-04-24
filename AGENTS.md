@@ -49,6 +49,9 @@ Three phases in matcher:
 - `editingDirty` compares `pendingChords` vs prop chords by JSON equality
 - Words are split into sub-segments at chord boundaries for rendering (`buildWordSegments`)
 
+## Word-level highlighting
+`LyricLine` renders word `<span>`s with `word-past` / `word-active` / `word-upcoming` classes based on `currentTimeMs` against each `LyricWord.beginMs/endMs`. The effect is only visible on the active line (scoped via `.line.active .word-*` CSS). Detection uses `hasWordTiming` — a line is considered to have word timing when at least one word's timing diverges from the line's own `beginMs/endMs` (skips the synthetic fallback words the parser emits for chord lines lacking per-word spans).
+
 ## TTML format
 Lyrics in first `<div>`, chords in `<div ttm:agent="chords">`. Chord `<p>` timing matches lyrics `<p>` timing.
 
