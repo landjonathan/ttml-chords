@@ -161,6 +161,7 @@ function setLineRef(comp: unknown, index: number) {
       :line-class="getLineClass(line, index)"
       :transposition="transposition"
       :current-time-ms="currentTimeMs"
+      :is-playing="isPlaying"
       :active-chord-char-index="activeHighlightChord?.lineIndex === index ? activeHighlightChord.charIndex : null"
       @seek-to="emit('seekTo', $event)"
       @chords-updated="(idx, chords) => emit('chordsUpdated', idx, chords)"

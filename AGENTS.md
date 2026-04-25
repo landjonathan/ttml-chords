@@ -51,6 +51,8 @@ Three phases in matcher:
 
 ## Word-level highlighting
 `LyricLine` renders word `<span>`s with `word-past` / `word-active` / `word-upcoming` classes based on `currentTimeMs` against each `LyricWord.beginMs/endMs`. The effect is only visible on the active line (scoped via `.line.active .word-*` CSS). Detection uses `hasWordTiming` — a line is considered to have word timing when at least one word's timing diverges from the line's own `beginMs/endMs` (skips the synthetic fallback words the parser emits for chord lines lacking per-word spans).
+## Chord frame + progress gradient
+Every line that has chords wraps its words in a `.chord-frame` (light border, `width: fit-content`) with a `.chord-frame-gradient` inside. The gradient's `width` is computed as a pure line-progress percentage `(smoothedTimeMs - line.beginMs) / (line.endMs - line.beginMs)`, which is naturally synced to chord positions because chord activation time and character position both scale linearly with `charIndex / textLen`. On lines with real word timing the gradient is rendered at half opacity (`.chord-frame-gradient-dim`) since per-word highlighting already conveys progress.
 
 ## TTML format
 Lyrics in first `<div>`, chords in `<div ttm:agent="chords">`. Chord `<p>` timing matches lyrics `<p>` timing.

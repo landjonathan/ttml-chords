@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { ChordPosition, LyricLine, ParsedTtml } from '~/types'
-import { parseTtml, findActiveLineIndex } from '~/composables/useTtmlParser'
+import { parseTtml } from '~/composables/useTtmlParser'
 import { serializeTtml } from '~/composables/useTtmlSerializer'
 import type { AudioPlayer } from '#components'
 
@@ -39,21 +39,6 @@ const routeSlug = computed(() => {
   return slug || ''
 })
 
-const lineProgress = computed(() => {
-  const idx = findActiveLineIndex(lines.value, currentTimeMs.value)
-  if (idx < 0) return 0
-  const line = lines.value[idx]
-  const duration = line.endMs - line.beginMs
-  if (duration <= 0) return 0
-  return Math.min(100, Math.max(0, ((currentTimeMs.value - line.beginMs) / duration) * 100))
-})
-
-const preRollProgress = computed(() => {
-  if (!lines.value.length) return 0
-  const firstMs = lines.value[0].beginMs
-  if (firstMs <= 0 || currentTimeMs.value <= 0 || currentTimeMs.value >= firstMs) return 0
-  return (currentTimeMs.value / firstMs) * 100
-})
 const hasChords = computed(() => lines.value.some((l) => l.chords.length > 0))
 
 const currentSnapshot = computed(() =>
@@ -236,17 +221,6 @@ if (import.meta.client) {
 
 <template>
   <div class="app">
-    <div
-      v-if="hasLyrics && isPlaying"
-      class="progress-gradient"
-      :style="{ transform: `scaleX(${lineProgress / 100})`, transitionDuration: lineProgress < 3 ? '0s' : '0.15s' }"
-    />
-    <div
-      v-if="hasLyrics && isPlaying && preRollProgress > 0"
-      class="progress-gradient progress-preroll"
-      :style="{ transform: `scaleX(${preRollProgress / 100})` }"
-    />
-
     <PlaybackSidebar
       v-if="hasLyrics"
       :has-chords="hasChords"
@@ -337,21 +311,6 @@ if (import.meta.client) {
   height: 100dvh;
   overflow: hidden;
   position: relative;
-}
-
-.progress-gradient {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.05));
-  transform-origin: left;
-  will-change: transform;
-  transition: transform 0.15s linear;
-}
-
-.progress-preroll {
-  background: linear-gradient(to right, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.07));
 }
 
 .app-main {

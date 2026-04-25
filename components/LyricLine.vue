@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { LyricLine, LyricWord, ChordPosition } from '~/types'
 import { parse as parseChord, transpose as transposeChord, prettyPrint } from 'chord-magic'
 
@@ -9,6 +9,7 @@ const props = defineProps<{
   lineClass: string
   transposition: number
   currentTimeMs: number
+  isPlaying: boolean
   activeChordCharIndex: number | null
 }>()
 
@@ -19,6 +20,61 @@ const emit = defineEmits<{
 
 const el = ref<HTMLDivElement | null>(null)
 defineExpose({ el })
+
+// Gradient state for chord lines without word timing.
+// Because chord activation time and chord character-position are both
+// proportional to `charIndex / textLen` (when no word timing is present),
+// a simple linear line-progress gradient is naturally synced to each
+// chord's position when that chord activates. No DOM measurement needed.
+
+// Local RAF clock that extrapolates between sparse `currentTimeMs` prop
+// updates (HTMLMediaElement `timeupdate` can fire as slowly as ~4 Hz).
+// `smoothedTimeMs` advances every animation frame using the wall-clock delta
+// since the last received prop value, so the gradient interpolates smoothly.
+const smoothedTimeMs = ref(props.currentTimeMs)
+let lastReceivedTimeMs = props.currentTimeMs
+let lastReceivedAt = typeof performance !== 'undefined' ? performance.now() : 0
+let rafId = 0
+
+function tickClock () {
+  if (props.isPlaying) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    smoothedTimeMs.value = lastReceivedTimeMs + (now - lastReceivedAt)
+  }
+  rafId = requestAnimationFrame(tickClock)
+}
+
+watch(
+  () => props.currentTimeMs,
+  (val) => {
+    lastReceivedTimeMs = val
+    lastReceivedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    smoothedTimeMs.value = val
+  },
+)
+
+watch(
+  () => props.isPlaying,
+  (playing) => {
+    if (playing) {
+      // Reset baseline so the paused duration isn't counted as elapsed.
+      lastReceivedTimeMs = props.currentTimeMs
+      lastReceivedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    } else {
+      smoothedTimeMs.value = props.currentTimeMs
+    }
+  },
+)
+
+const gradientStyle = computed(() => {
+  const t = smoothedTimeMs.value
+  const line = props.line
+  const duration = line.endMs - line.beginMs
+  if (duration <= 0) return { width: '0%' }
+  const progress = (t - line.beginMs) / duration
+  const pct = Math.min(100, Math.max(0, progress * 100))
+  return { width: `${pct}%` }
+})
 
 const hoveredCharIndex = ref<number | null>(null)
 const editingCharIndex = ref<number | null>(null)
@@ -268,11 +324,15 @@ onMounted(() => {
   document.addEventListener('pointerdown', onClickOutside)
   document.addEventListener('mousemove', onDocumentMouseMove)
   document.addEventListener('keydown', onKeyDown)
+  if (typeof requestAnimationFrame !== 'undefined') {
+    rafId = requestAnimationFrame(tickClock)
+  }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onClickOutside)
   document.removeEventListener('mousemove', onDocumentMouseMove)
   document.removeEventListener('keydown', onKeyDown)
+  if (rafId && typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(rafId)
 })
 
 </script>
@@ -280,12 +340,14 @@ onBeforeUnmount(() => {
 <template>
   <div ref="el" :class="lineClass" @click="onLineClick">
     <span v-if="line.songPart" class="song-part-label">{{ line.songPart }}</span>
-    <template v-if="hasChords() || lineChords().length > 0">
+    <span v-if="hasChords() || lineChords().length > 0" class="chord-frame">
+      <span class="chord-frame-gradient" :class="{ 'chord-frame-gradient-dim': hasWordTiming }" :style="gradientStyle" />
       <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word word-has-chord" :class="wordStateClass(word)">
         <template v-for="(seg, sIdx) in buildWordSegments(word.text, wordStartIndex(wIdx))" :key="sIdx">
           <span v-if="seg.chord" class="segment-with-chord">
             <span
               class="chord-label chord-interactive"
+              :data-char-index="seg.charIndex"
               :class="{ 'chord-active': isChordActive(seg.charIndex), 'chord-editing': isChordEditing(seg.charIndex), 'chord-moving': isMoveMode && isChordEditing(seg.charIndex) }"
               @mouseenter="onChordEnter(seg.charIndex)"
               @mouseleave="onChordLeave"
@@ -320,6 +382,7 @@ onBeforeUnmount(() => {
         <span class="segment-with-chord">
           <span
             class="chord-label chord-interactive"
+            :data-char-index="tc.charIndex"
             :class="{ 'chord-active': isChordActive(tc.charIndex), 'chord-editing': isChordEditing(tc.charIndex) }"
             @mouseenter="onChordEnter(tc.charIndex)"
             @mouseleave="onChordLeave"
@@ -329,7 +392,7 @@ onBeforeUnmount(() => {
           <span class="word-text">​</span>
         </span>
       </span>
-    </template>
+    </span>
     <template v-else-if="hasWordTiming">
       <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word" :class="wordStateClass(word)"><span class="word-text">{{ word.text }}</span></span>
     </template>
@@ -375,6 +438,37 @@ onBeforeUnmount(() => {
 .word { display: inline-block; margin-right: 0.25em; }
 .word-has-chord { position: relative; padding-top: 0.7em; }
 .segment-with-chord { position: relative; display: inline; }
+
+/* Frame wrapping all chord-bearing words on a line. The inside gradient
+   represents line progress and its right edge is synced with the currently
+   highlighted chord. */
+.chord-frame {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.1em 0.5em 0.15em;
+}
+.chord-frame-gradient {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0%;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.12));
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 1;
+  /* JS interpolates width continuously from currentTimeMs; short linear
+     transition just smooths stepping when audio timeupdate fires at a low
+     rate. */
+  transition: width 0.1s linear;
+  z-index: 0;
+}
+.chord-frame-gradient-dim { opacity: 0.5; }
+.chord-frame > .word { position: relative; z-index: 1; }
 
 /* Progressive word highlighting on the active line. Past/upcoming lines use
    line-level styling so the progressive effect is only visible while singing.
