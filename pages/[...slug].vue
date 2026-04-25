@@ -61,6 +61,27 @@ const lyricsDuration = computed(() => {
   return Math.max(...lines.value.map(l => l.endMs)) / 1000
 })
 
+// Pre-roll progress: fades from 0 to 100% as playback approaches the
+// first lyric line's beginMs.
+const preRollProgress = computed(() => {
+  if (!lines.value.length) return 0
+  const firstMs = lines.value[0].beginMs
+  if (firstMs <= 0 || currentTimeMs.value <= 0 || currentTimeMs.value >= firstMs) return 0
+  return (currentTimeMs.value / firstMs) * 100
+})
+
+// Post-roll progress: fades from 0 to 100% as playback continues past
+// the last lyric line's endMs until the song's total duration.
+const postRollProgress = computed(() => {
+  if (!lines.value.length) return 0
+  const lastMs = Math.max(...lines.value.map((l) => l.endMs))
+  const totalMs = (parsedTtml.value?.totalDurationMs ?? 0) || (lyricsDuration.value * 1000)
+  if (totalMs <= lastMs) return 0
+  if (currentTimeMs.value <= lastMs) return 0
+  if (currentTimeMs.value >= totalMs) return 100
+  return ((currentTimeMs.value - lastMs) / (totalMs - lastMs)) * 100
+})
+
 function loadTtml(content: string) {
   parseError.value = ''
   try {
@@ -221,6 +242,17 @@ if (import.meta.client) {
 
 <template>
   <div class="app">
+    <div
+      v-if="hasLyrics && isPlaying && preRollProgress > 0"
+      class="progress-gradient progress-roll"
+      :style="{ transform: `scaleX(${preRollProgress / 100})` }"
+    />
+    <div
+      v-if="hasLyrics && isPlaying && postRollProgress > 0"
+      class="progress-gradient progress-roll"
+      :style="{ transform: `scaleX(${postRollProgress / 100})` }"
+    />
+
     <PlaybackSidebar
       v-if="hasLyrics"
       :has-chords="hasChords"
@@ -311,6 +343,22 @@ if (import.meta.client) {
   height: 100dvh;
   overflow: hidden;
   position: relative;
+}
+
+/* Full-viewport pre-roll / post-roll progress gradient. Shown only
+   outside the lyric lines' time range; per-line progress is conveyed
+   by the in-frame .chord-frame gradient instead. */
+.progress-gradient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  transform-origin: left;
+  will-change: transform;
+  transition: transform 0.15s linear;
+}
+.progress-roll {
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.07));
 }
 
 .app-main {
