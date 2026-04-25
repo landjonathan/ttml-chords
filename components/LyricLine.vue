@@ -422,21 +422,25 @@ onBeforeUnmount(() => {
   margin-inline-end: 24px;
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+  /* Use the active font-size for layout in every state so word wrapping is
+     identical across active / past / upcoming and there's no reflow when a
+     line transitions; non-active states scale down visually via transform. */
+  font-size: 2rem;
   font-weight: 700;
   line-height: 2;
   user-select: none;
+  transform-origin: left center;
 }
 .line:hover { opacity: 0.9 !important; }
 .line.active {
-  font-size: 2rem;
   color: rgba(255, 255, 255, 1);
   opacity: 1;
   transform: scale(1);
   padding: 1em 0;
 }
-.line.past { font-size: 1.5rem; color: rgba(255, 255, 255, 0.3); opacity: 1; }
-.line.upcoming { font-size: 1.5rem; color: rgba(255, 255, 255, 0.45); opacity: 1; }
-.line.background { font-size: 1.2rem; color: rgba(255, 255, 255, 0.25); font-style: italic; }
+.line.past { color: rgba(255, 255, 255, 0.3); opacity: 1; transform: scale(0.75); }
+.line.upcoming { color: rgba(255, 255, 255, 0.45); opacity: 1; transform: scale(0.75); }
+.line.background { color: rgba(255, 255, 255, 0.25); font-style: italic; transform: scale(0.6); }
 .line.past .chord-label { color: rgba(90, 200, 250, 0.5); }
 
 .word { display: inline-block; margin-right: 0.25em; }
@@ -549,7 +553,7 @@ onBeforeUnmount(() => {
 .pop-move-confirm:hover { background: rgba(90, 200, 250, 0.15); }
 
 @media (max-width: 600px) {
-  .line.active { font-size: 1.6rem; }
-  .line.past, .line.upcoming { font-size: 1.2rem; }
+  .line { font-size: 1.6rem; }
+  .line.past, .line.upcoming { transform: scale(0.75); }
 }
 </style>
