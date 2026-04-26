@@ -45,6 +45,16 @@ async function search() {
     if (searchResults.value.length === 0) {
       error.value = 'No chord tabs found. Try a different search.'
     }
+    searchResults.value.sort((a, b) => {
+      const aExact = a.song_name.toLowerCase() === song.value.trim().toLowerCase()
+      const bExact = b.song_name.toLowerCase() === song.value.trim().toLowerCase()
+      if (aExact !== bExact)
+        return Number(bExact) - Number(aExact)
+
+      return a.song_name.localeCompare(b.song_name) ||
+        a.artist_name.localeCompare(b.artist_name) ||
+        b.rating - a.rating
+    })
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Search failed'
   } finally {
