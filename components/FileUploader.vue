@@ -52,12 +52,12 @@ function processFiles(files: FileList) {
       @click="fileInput?.click()"
     >
       <div class="drop-content">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
-        <p>Drop <strong>.ttml</strong> and <strong>audio</strong> files here</p>
+        <p>Drop <strong>.ttml</strong> files here</p>
         <span class="browse-btn">Browse files</span>
         <input
           ref="fileInput"
@@ -95,7 +95,7 @@ function processFiles(files: FileList) {
   max-width: 480px;
   border: 2px dashed rgba(255, 255, 255, 0.15);
   border-radius: 16px;
-  padding: 40px 24px;
+  padding: 24px;
   text-align: center;
   transition: all 0.2s ease;
   cursor: pointer;

@@ -110,12 +110,8 @@ defineExpose({ loadSongs })
     <p v-if="isLoading" class="loading-message">Loading library…</p>
     <p v-if="loadError" class="error">{{ loadError }}</p>
 
-    <!-- Divider -->
-    <div v-if="songs.length > 0" class="divider"></div>
-
     <!-- Upload section -->
     <div class="upload-section">
-      <p class="upload-label">Add new song</p>
       <FileUploader
         @ttml-loaded="onTtmlLoaded"
         @audio-loaded="onAudioLoaded"
@@ -163,7 +159,6 @@ defineExpose({ loadSongs })
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 280px;
   overflow-y: auto;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 12px;
@@ -260,7 +255,7 @@ defineExpose({ loadSongs })
 .upload-section {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
 }
 
