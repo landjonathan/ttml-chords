@@ -1,5 +1,5 @@
 import type { ChordPosition, LyricLine, LyricWord, UgChordLine } from '~/types'
-import { mapChordsToCharPositions } from '~/composables/useChordParser'
+import { mapChordsToCharPositions, normalizeWord, fuzzyWordMatch } from '~/composables/useChordParser'
 
 /**
  * Normalize text for comparison: lowercase, strip punctuation, collapse whitespace.
@@ -20,27 +20,48 @@ function toWords(text: string): string[] {
 }
 
 /**
- * Compute a simple similarity score between two strings (0-1).
- * Uses word overlap ratio.
+ * Compute a similarity score between two strings (0–1).
+ * Handles syllable-split TTML words by greedily concatenating consecutive
+ * A words that match a B word (e.g. "ri"+"sin" → "risin" matching "risin").
+ * Uses fuzzy matching so e.g. "risin" ≈ "rising".
  */
 function similarity(a: string, b: string): number {
   const wordsA = toWords(a)
   const wordsB = toWords(b)
   if (wordsA.length === 0 || wordsB.length === 0) return 0
 
+  // Pre-merge: greedily concatenate consecutive A words that match a B word.
+  const normB = wordsB.map(normalizeWord)
+  const mergedA: string[] = []
+  let i = 0
+  while (i < wordsA.length) {
+    let merged = false
+    for (let span = 3; span >= 2; span--) {
+      if (i + span > wordsA.length) continue
+      const concat = wordsA.slice(i, i + span).join('')
+      if (normB.some((nb) => concat === nb || fuzzyWordMatch(concat, nb))) {
+        mergedA.push(concat)
+        i += span
+        merged = true
+        break
+      }
+    }
+    if (!merged) { mergedA.push(wordsA[i]); i++ }
+  }
+
+  // Word overlap with fuzzy matching
   let matches = 0
   const used = new Set<number>()
-  for (const wa of wordsA) {
-    for (let i = 0; i < wordsB.length; i++) {
-      if (!used.has(i) && wa === wordsB[i]) {
+  for (const wa of mergedA) {
+    for (let j = 0; j < wordsB.length; j++) {
+      if (!used.has(j) && (wa === wordsB[j] || fuzzyWordMatch(wa, wordsB[j]))) {
         matches++
-        used.add(i)
+        used.add(j)
         break
       }
     }
   }
-  const maxLen = Math.max(wordsA.length, wordsB.length)
-  return matches / maxLen
+  return matches / Math.max(mergedA.length, wordsB.length)
 }
 
 /**

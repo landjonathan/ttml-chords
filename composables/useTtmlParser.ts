@@ -173,8 +173,9 @@ export function parseTtml(xml: string): ParsedTtml {
       p.getAttribute('ttm:role') === 'x-bg' ||
       p.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'role') === 'x-bg'
 
-    // Extract word-level spans, merging syllable splits (consecutive
-    // spans with no whitespace text node between them) into whole words.
+    // Extract word-level spans. Each timed <span> becomes a separate word;
+    // syllable-split spans (e.g. "Ri" + "sin'") are NOT merged here — the
+    // chord matcher handles concatenation during word alignment.
     // Inline bg vocal wrappers (<span ttm:role="x-bg">) are collected
     // separately and emitted as distinct background lines.
     const words: LyricWord[] = []
@@ -205,27 +206,17 @@ export function parseTtml(xml: string): ParsedTtml {
           continue
         }
 
-        const syllable = span.textContent || ''
-        if (!syllable) continue
+        const rawText = span.textContent || ''
+        if (!rawText) continue
 
-        // Check if the previous sibling is a span with no whitespace in between
-        const prev = node.previousSibling
-        const hasPrecedingSpace =
-          !prev ||
-          prev.nodeType !== Node.ELEMENT_NODE ||
-          (prev as Element).localName !== 'span'
+        const trimmed = rawText.replace(/^\s+/, '').replace(/\s+$/, '')
+        if (!trimmed) continue
 
-        if (!hasPrecedingSpace && target.length > 0) {
-          const last = target[target.length - 1]
-          last.text += syllable
-          last.endMs = parseTime(spanEnd)
-        } else {
-          target.push({
-            text: syllable.trimStart(),
-            beginMs: parseTime(spanBegin),
-            endMs: parseTime(spanEnd),
-          })
-        }
+        target.push({
+          text: trimmed,
+          beginMs: parseTime(spanBegin),
+          endMs: parseTime(spanEnd),
+        })
       }
     }
     collectSpans(p, words)

@@ -31,7 +31,7 @@ const hasRealWordTiming = (line: LyricLine) => {
 
 /**
  * Serialize a line's words into <span> elements.
- * Only emits spans for word-timed lines; line-timed lines are handled as plain text.
+ * One span per word, no in-text spaces (matches Apple Music TTML format).
  */
 const serializeWordSpans = (line: LyricLine) =>
   line.words

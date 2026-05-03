@@ -147,7 +147,39 @@ const buildWordBounds = (text: string) => {
 /**
  * Normalize a word for comparison: lowercase, strip non-word chars.
  */
-const normalizeWord = (text: string) => text.toLowerCase().replace(/[^\w]/g, '')
+export const normalizeWord = (text: string) => text.toLowerCase().replace(/[^\w]/g, '')
+
+/**
+ * Levenshtein edit distance between two strings.
+ */
+const levenshtein = (a: string, b: string) => {
+  const m = a.length, n = b.length
+  if (m === 0) return n
+  if (n === 0) return m
+  const dp = Array.from({ length: m + 1 }, (_, i) => i)
+  for (let j = 1; j <= n; j++) {
+    let prev = dp[0]
+    dp[0] = j
+    for (let i = 1; i <= m; i++) {
+      const temp = dp[i]
+      dp[i] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[i], dp[i - 1])
+      prev = temp
+    }
+  }
+  return dp[m]
+}
+
+/**
+ * Fuzzy word match using Levenshtein ratio.
+ * Returns true when normalized words are similar enough (≥75%).
+ * Words with ≤2 characters require exact match to avoid false positives.
+ */
+export const fuzzyWordMatch = (a: string, b: string) => {
+  if (a === b) return true
+  const maxLen = Math.max(a.length, b.length)
+  if (maxLen <= 2) return false
+  return 1 - levenshtein(a, b) / maxLen >= 0.75
+}
 
 /**
  * Map UG chord positions to character indices in the TTML line text.
@@ -167,20 +199,39 @@ export function mapChordsToCharPositions(
   const ttmlWords = buildWordBounds(ttmlText)
   if (ugWords.length === 0 || ttmlWords.length === 0) return []
 
-  // Two-pointer word alignment: match UG words to TTML words by text
+  // Two-pointer word alignment: match UG words to TTML words by text.
+  // Supports fuzzy matching (handles spelling differences like risin'/rising)
+  // and syllable concatenation (consecutive TTML words merged to match a
+  // single UG word, e.g. TTML "Ri"+"sin'" → UG "Risin'").
   const ugToTtml = new Array<number>(ugWords.length).fill(-1)
+  const ugToTtmlSpan = new Array<number>(ugWords.length).fill(1)
   const ugNorm = ugWords.map((w) => normalizeWord(ugLyrics.slice(w.start, w.end)))
   const ttmlNorm = ttmlWords.map((w) => normalizeWord(ttmlText.slice(w.start, w.end)))
 
   let ttmlPtr = 0
   for (let u = 0; u < ugWords.length; u++) {
     if (ttmlPtr >= ttmlWords.length) break
+    let matched = false
     for (let skip = 0; skip <= 3 && ttmlPtr + skip < ttmlWords.length; skip++) {
-      if (ugNorm[u] === ttmlNorm[ttmlPtr + skip]) {
+      // Single word match (exact or fuzzy)
+      if (ugNorm[u] === ttmlNorm[ttmlPtr + skip] || fuzzyWordMatch(ugNorm[u], ttmlNorm[ttmlPtr + skip])) {
         ugToTtml[u] = ttmlPtr + skip
         ttmlPtr = ttmlPtr + skip + 1
+        matched = true
         break
       }
+      // Concatenate 2–3 consecutive TTML words to match a single UG word
+      for (let span = 2; span <= 3 && ttmlPtr + skip + span <= ttmlWords.length; span++) {
+        const concatNorm = ttmlNorm.slice(ttmlPtr + skip, ttmlPtr + skip + span).join('')
+        if (ugNorm[u] === concatNorm || fuzzyWordMatch(ugNorm[u], concatNorm)) {
+          ugToTtml[u] = ttmlPtr + skip
+          ugToTtmlSpan[u] = span
+          ttmlPtr = ttmlPtr + skip + span
+          matched = true
+          break
+        }
+      }
+      if (matched) break
     }
   }
 
@@ -257,15 +308,20 @@ export function mapChordsToCharPositions(
           : (nextTtml < ttmlWords.length ? nextTtml : ttmlWords.length - 1)
       }
 
-      const ttmlWord = ttmlWords[ttmlWordIdx]
+      // When a UG word matched concatenated TTML words, the character range
+      // spans the full concatenation (including the spaces between them).
+      const span = ugToTtmlSpan[ugWordIdx]
+      const ttmlRangeStart = ttmlWords[ttmlWordIdx].start
+      const ttmlRangeEnd = ttmlWords[Math.min(ttmlWordIdx + span - 1, ttmlWords.length - 1)].end
+      const ttmlRangeLen = ttmlRangeEnd - ttmlRangeStart
+
       const ugWord = ugWords[ugWordIdx]
       const ugWordLen = ugWord.end - ugWord.start
-      const ttmlWordLen = ttmlWord.end - ttmlWord.start
 
       const fraction = ugWordLen > 0 ? offsetInWord / ugWordLen : 0
-      const charIndex = ttmlWord.start + Math.min(
-        Math.round(fraction * ttmlWordLen),
-        Math.max(ttmlWordLen - 1, 0),
+      const charIndex = ttmlRangeStart + Math.min(
+        Math.round(fraction * ttmlRangeLen),
+        Math.max(ttmlRangeLen - 1, 0),
       )
 
       return { chord, charIndex }
