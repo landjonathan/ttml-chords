@@ -165,6 +165,37 @@ const wordStateClass = (word: LyricWord): string => {
   return 'word-upcoming'
 }
 
+const syllableStateClass = (syl: { beginMs: number; endMs: number }): string => {
+  if (!hasWordTiming.value) return ''
+  const t = props.currentTimeMs
+  if (syl.endMs > 0 && t >= syl.endMs) return 'word-past'
+  if (t >= syl.beginMs) return 'word-active'
+  return 'word-upcoming'
+}
+
+const splitTextBySyllables = (segText: string, segCharIndex: number, wIdx: number) => {
+  const word = props.line.words[wIdx]
+  if (!word?.syllables || word.syllables.length <= 1) return null
+  const wordStart = wordStartIndex(wIdx)
+  const localStart = segCharIndex - wordStart
+  const localEnd = localStart + segText.length
+  const slices: { text: string; stateClass: string }[] = []
+  let sylOffset = 0
+  for (const syl of word.syllables) {
+    const sylEnd = sylOffset + syl.text.length
+    const oStart = Math.max(localStart, sylOffset)
+    const oEnd = Math.min(localEnd, sylEnd)
+    if (oEnd > oStart) {
+      slices.push({
+        text: segText.slice(oStart - localStart, oEnd - localStart),
+        stateClass: syllableStateClass(syl),
+      })
+    }
+    sylOffset = sylEnd
+  }
+  return slices.length > 0 ? slices : null
+}
+
 function hasChords(): boolean { return props.line.chords.length > 0 }
 
 function onChordEnter(ci: number) {
@@ -346,7 +377,7 @@ onBeforeUnmount(() => {
       :class="{ 'chord-frame-dim': hasWordTiming }"
       :style="{ '--chord-progress': gradientWidth }"
     >
-      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word word-has-chord" :class="wordStateClass(word)">
+      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word word-has-chord" :class="word.syllables ? '' : wordStateClass(word)">
         <template v-for="(seg, sIdx) in buildWordSegments(word.text, wordStartIndex(wIdx))" :key="sIdx">
           <span v-if="seg.chord" class="segment-with-chord">
             <span
@@ -373,8 +404,14 @@ onBeforeUnmount(() => {
                 <button v-else class="pop-btn" @click="startEditing(seg.charIndex, $event)">✎</button>
               </span>
             </span>
-            <span class="word-text">{{ seg.text }}</span>
+            <template v-if="splitTextBySyllables(seg.text, seg.charIndex, wIdx)">
+              <span v-for="(sl, slIdx) in splitTextBySyllables(seg.text, seg.charIndex, wIdx)" :key="slIdx" :class="sl.stateClass"><span class="word-text">{{ sl.text }}</span></span>
+            </template>
+            <span v-else class="word-text">{{ seg.text }}</span>
           </span>
+          <template v-else-if="splitTextBySyllables(seg.text, seg.charIndex, wIdx)">
+            <span v-for="(sl, slIdx) in splitTextBySyllables(seg.text, seg.charIndex, wIdx)" :key="slIdx" :class="sl.stateClass"><span class="word-text">{{ sl.text }}</span></span>
+          </template>
           <span v-else class="word-text">{{ seg.text }}</span>
         </template>
       </span>
@@ -398,7 +435,12 @@ onBeforeUnmount(() => {
       </span>
     </span>
     <template v-else-if="hasWordTiming">
-      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word" :class="wordStateClass(word)"><span class="word-text">{{ word.text }}</span></span>
+      <span v-for="(word, wIdx) in line.words" :key="wIdx" class="word" :class="word.syllables ? '' : wordStateClass(word)">
+        <template v-if="word.syllables">
+          <span v-for="(syl, sIdx) in word.syllables" :key="sIdx" :class="syllableStateClass(syl)"><span class="word-text">{{ syl.text }}</span></span>
+        </template>
+        <span v-else class="word-text">{{ word.text }}</span>
+      </span>
     </template>
     <template v-else>{{ line.text }}</template>
   </div>

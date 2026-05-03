@@ -31,15 +31,25 @@ const hasRealWordTiming = (line: LyricLine) => {
 
 /**
  * Serialize a line's words into <span> elements.
- * One span per word, no in-text spaces (matches Apple Music TTML format).
+ * Syllable spans are emitted adjacently (no separator); a space text node
+ * is placed between words. This matches the raw Apple Music TTML format
+ * and allows the parser to reconstruct word boundaries on re-import.
  */
-const serializeWordSpans = (line: LyricLine) =>
-  line.words
-    .map(
-      (w) =>
-        `        <span begin="${formatTime(w.beginMs)}" end="${formatTime(w.endMs)}">${escapeXml(w.text)}</span>`
-    )
-    .join('\n')
+const serializeWordSpans = (line: LyricLine) => {
+  const parts: string[] = []
+  for (let i = 0; i < line.words.length; i++) {
+    const w = line.words[i]
+    if (i > 0) parts.push(' ')
+    if (w.syllables && w.syllables.length > 1) {
+      for (const syl of w.syllables) {
+        parts.push(`<span begin="${formatTime(syl.beginMs)}" end="${formatTime(syl.endMs)}">${escapeXml(syl.text)}</span>`)
+      }
+    } else {
+      parts.push(`<span begin="${formatTime(w.beginMs)}" end="${formatTime(w.endMs)}">${escapeXml(w.text)}</span>`)
+    }
+  }
+  return `        ${parts.join('')}`
+}
 
 /**
  * Build the chords <div> containing only lines that have chord annotations.

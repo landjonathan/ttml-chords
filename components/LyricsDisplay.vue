@@ -35,6 +35,20 @@ function chordTimeMs(line: LyricLine, charIndex: number): number {
       return w.beginMs
     }
     if (charIndex < wEnd) {
+      // When syllable-level timing is available, interpolate within the
+      // correct syllable for sub-word precision.
+      if (w.syllables) {
+        let sylPos = wStart
+        for (const syl of w.syllables) {
+          const sylEnd = sylPos + syl.text.length
+          if (charIndex < sylEnd) {
+            const sylDur = syl.endMs - syl.beginMs
+            if (syl.text.length === 0 || sylDur <= 0) return syl.beginMs
+            return syl.beginMs + ((charIndex - sylPos) / syl.text.length) * sylDur
+          }
+          sylPos = sylEnd
+        }
+      }
       const wDur = w.endMs - w.beginMs
       if (w.text.length === 0 || wDur <= 0) return w.beginMs
       return w.beginMs + ((charIndex - wStart) / w.text.length) * wDur

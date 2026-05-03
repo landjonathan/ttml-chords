@@ -173,9 +173,17 @@ export function parseTtml(xml: string): ParsedTtml {
       p.getAttribute('ttm:role') === 'x-bg' ||
       p.getAttributeNS('http://www.w3.org/ns/ttml#metadata', 'role') === 'x-bg'
 
-    // Extract word-level spans. Each timed <span> becomes a separate word;
-    // syllable-split spans (e.g. "Ri" + "sin'") are NOT merged here — the
-    // chord matcher handles concatenation during word alignment.
+    // Extract word-level spans, merging consecutive syllable spans into
+    // whole words while preserving syllable-level timing.
+    //
+    // In raw Apple Music TTML, word boundaries are encoded as whitespace
+    // text nodes between <span> elements: adjacent spans with NO text node
+    // between them are syllables of the same word (e.g. <span>Ri</span>
+    // <span>sin'</span>), while a space text node signals a new word
+    // (e.g. </span> <span>). Pretty-printed TTML loses this signal
+    // (all gaps become newlines), so the chord matcher also handles
+    // unmerged syllables as a fallback via concatenation during alignment.
+    //
     // Inline bg vocal wrappers (<span ttm:role="x-bg">) are collected
     // separately and emitted as distinct background lines.
     const words: LyricWord[] = []
@@ -212,11 +220,30 @@ export function parseTtml(xml: string): ParsedTtml {
         const trimmed = rawText.replace(/^\s+/, '').replace(/\s+$/, '')
         if (!trimmed) continue
 
-        target.push({
-          text: trimmed,
-          beginMs: parseTime(spanBegin),
-          endMs: parseTime(spanEnd),
-        })
+        // Syllable merge: if the previous sibling is a <span> with no
+        // text node between them, this is a syllable of the same word.
+        const prev = node.previousSibling
+        const isSyllable =
+          target.length > 0 &&
+          prev !== null &&
+          prev.nodeType === Node.ELEMENT_NODE &&
+          (prev as Element).localName === 'span'
+
+        if (isSyllable) {
+          const last = target[target.length - 1]
+          if (!last.syllables) {
+            last.syllables = [{ text: last.text, beginMs: last.beginMs, endMs: last.endMs }]
+          }
+          last.syllables.push({ text: trimmed, beginMs: parseTime(spanBegin), endMs: parseTime(spanEnd) })
+          last.text += trimmed
+          last.endMs = parseTime(spanEnd)
+        } else {
+          target.push({
+            text: trimmed,
+            beginMs: parseTime(spanBegin),
+            endMs: parseTime(spanEnd),
+          })
+        }
       }
     }
     collectSpans(p, words)

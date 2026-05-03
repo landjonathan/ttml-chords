@@ -2,6 +2,7 @@ export interface LyricWord {
   text: string
   beginMs: number
   endMs: number
+  syllables?: { text: string; beginMs: number; endMs: number }[]
 }
 
 export interface ChordPosition {
