@@ -24,6 +24,18 @@ const loadError = ref('')
 const fetchingFilename = ref('')
 const confirmDelete = ref<SavedSong | null>(null)
 
+const sortBy = ref<keyof SavedSong>('artist')
+
+function toggleSortby () {
+  if (sortBy.value === 'artist') {
+    sortBy.value = 'song'
+  } else {
+    sortBy.value = 'artist'
+  }
+}
+
+const sortedSongs = computed(() => songs.value.toSorted((a, b) => a[sortBy.value].localeCompare(b[sortBy.value])))
+
 async function loadSongs() {
   isLoading.value = true
   loadError.value = ''
@@ -82,9 +94,10 @@ defineExpose({ loadSongs })
   <div class="song-library" :class="{ 'menu-mode': menuMode }">
     <h2 v-if="!menuMode" class="library-title">Library</h2>
 
+    <button @click="toggleSortby" class="sort-btn">Sorted by {{ sortBy }}</button>
     <!-- Saved songs list -->
-    <div v-if="songs.length > 0" class="songs-list">
-      <div v-for="s in songs" :key="s.filename" class="song-row">
+    <div v-if="sortedSongs.length > 0" class="songs-list">
+      <div v-for="s in sortedSongs" :key="s.filename" class="song-row">
         <button
           class="song-item"
           :disabled="fetchingFilename === s.filename"
@@ -215,6 +228,22 @@ defineExpose({ loadSongs })
 
 .delete-btn:hover {
   color: #ff453a;
+}
+
+.sort-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
 }
 
 .song-name {
