@@ -50,7 +50,14 @@ Three phases in matcher:
 - Words are split into sub-segments at chord boundaries for rendering (`buildWordSegments`)
 
 ## Syllable-split spans and sub-word timing
-Apple Music TTML may split words into multiple `<span>` elements for syllable-level timing (e.g. `<span>Ri</span><span>sin'</span>`). The parser (`useTtmlParser.ts` `collectSpans`) merges these into whole `LyricWord`s using a sibling heuristic: if a `<span>`’s `previousSibling` is another `<span>` element (no text node between them), it’s a syllable continuation. In the raw Apple Music API response, word boundaries are encoded as space text nodes between spans; syllable spans are adjacent with no separator. Merged words store the original syllable timings in `LyricWord.syllables?: { text, beginMs, endMs }[]`. This preserves whole-word text for chord matching while retaining sub-word precision for display.
+
+Apple Music TTML may split words into multiple `<span>` elements for syllable-level timing (e.g.
+`<span>Ri</span><span>sin'</span>`). The parser (`useTtmlParser.ts` `collectSpans`) merges these into whole `LyricWord`s
+using a sibling heuristic: if a `<span>`’s `previousSib32w-ling` is another `<span>` element (no text node between
+them), it’s a syllable continuation. In the raw Apple Music API response, word boundaries are encoded as space text
+nodes between spans; syllable spans are adjacent with no separator. Merged words store the original syllable timings in
+`LyricWord.syllables?: { text, beginMs, endMs }[]`. This preserves whole-word text for chord matching while retaining
+sub-word precision for display.
 
 Pretty-printing TTML destroys this signal (all gaps become `\n` + indentation), so the chord matcher also handles unmerged syllables as a fallback: both `mapChordsToCharPositions` and `similarity` try concatenating 2–3 consecutive TTML words to match a single UG word (e.g. TTML "Ri"+"sin'" → UG "Risin'"). Word alignment also uses Levenshtein-based fuzzy matching (≥75% ratio, min 3 chars) so e.g. "risin'" ≈ "rising". This keeps the matching robust without linguistic heuristics.
 
