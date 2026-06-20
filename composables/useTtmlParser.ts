@@ -95,7 +95,8 @@ function applyChordsFromAgent(doc: Document, lines: LyricLine[]): boolean {
     if (!chords) continue
 
     const duration = line.endMs - line.beginMs
-    const textLen = line.text.length
+    // For chord-only lines, use chord count as the scale for decoding charIndex
+    const textLen = Math.max(line.text.length, chords.length)
     if (textLen === 0) continue
 
     for (const { beginMs, chord } of chords) {
@@ -251,18 +252,17 @@ export function parseTtml(xml: string): ParsedTtml {
     const text =
       words.length > 0 ? words.map((w) => w.text).join(' ') : getTextContent(p)
 
-    if (text) {
-      lines.push({
-        index: idx,
-        text,
-        beginMs,
-        endMs,
-        words,
-        chords: [],
-        isBackground,
-        songPart: firstPSongPart.get(p),
-      })
-    }
+    // Keep empty-text lines (chord-only / instrumental sections)
+    lines.push({
+      index: idx,
+      text,
+      beginMs,
+      endMs,
+      words,
+      chords: [],
+      isBackground,
+      songPart: firstPSongPart.get(p),
+    })
 
     // Emit separate background lines for inline bg vocal groups
     for (const bgWords of bgWordGroups) {

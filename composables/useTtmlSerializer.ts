@@ -65,7 +65,10 @@ const buildChordsDiv = (lines: LyricLine[]) => {
     if (line.chords.length === 0) continue
 
     const duration = line.endMs - line.beginMs
-    const textLen = Math.max(line.text.length, 1)
+    // For chord-only lines (empty text), use the highest charIndex + 1 so
+    // chords encode proportional timing across the full line duration
+    const maxCharIndex = Math.max(...line.chords.map(c => c.charIndex), 0)
+    const textLen = Math.max(line.text.length, maxCharIndex + 1, 1)
     const step = duration / textLen
 
     const chordSpans = [...line.chords]

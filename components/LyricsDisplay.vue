@@ -11,6 +11,14 @@ import type { LyricLine, ChordPosition } from '~/types'
 function chordTimeMs(line: LyricLine, charIndex: number): number {
   const duration = line.endMs - line.beginMs
   const textLen = line.text.length
+
+  // Chord-only lines (no text): distribute timing proportionally by charIndex
+  if (textLen === 0 && line.chords.length > 0) {
+    const maxCI = Math.max(...line.chords.map(c => c.charIndex), 0)
+    const scale = maxCI + 1
+    return duration > 0 ? line.beginMs + (charIndex / scale) * duration : line.beginMs
+  }
+
   const lineFallback = duration > 0 && textLen > 0
     ? line.beginMs + (charIndex / textLen) * duration
     : line.beginMs

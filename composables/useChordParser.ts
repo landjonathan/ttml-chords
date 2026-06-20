@@ -118,7 +118,7 @@ export function parseUgContent(content: string): UgChordLine[] {
         break
       }
 
-      if (lyricsLine.trim() && chords.length > 0) {
+      if (chords.length > 0) {
         result.push({ lyrics: lyricsLine, chords, section: currentSection })
       }
 
@@ -239,7 +239,7 @@ export function mapChordsToCharPositions(
   const firstMatchedUg = ugToTtml.findIndex((t) => t !== -1)
   const lastMatchedUg = ugToTtml.lastIndexOf(Math.max(...ugToTtml))
 
-  return ugChords
+  const mapped = ugChords
     .map(({ chord, charPosition }): ChordPosition | null => {
       // Find which UG word owns this chord position
       let ugWordIdx = -1
@@ -254,8 +254,14 @@ export function mapChordsToCharPositions(
 
       // Chord is in whitespace
       if (ugWordIdx === -1) {
+        const firstUgWord = ugWords[0]
         const lastUgWord = ugWords[ugWords.length - 1]
+        if (charPosition < firstUgWord.start) {
+          // Leading whitespace — map to beginning of TTML text
+          return { chord, charIndex: 0 }
+        }
         if (charPosition >= lastUgWord.end) {
+          // Trailing whitespace — map to end (will be spread later)
           return { chord, charIndex: ttmlText.length }
         }
         // Snap to nearest UG word start
@@ -267,10 +273,30 @@ export function mapChordsToCharPositions(
         offsetInWord = 0
       }
 
-      // Skip chords on UG words outside the aligned range
-      if (firstMatchedUg === -1) return null
-      if (ugWordIdx < firstMatchedUg) return null
-      if (ugWordIdx > lastMatchedUg) return null
+      // No matched UG words at all — proportional fallback
+      if (firstMatchedUg === -1) {
+        const fraction = ttmlText.length > 0
+          ? charPosition / (ugWords[ugWords.length - 1].end)
+          : 0
+        return { chord, charIndex: Math.min(Math.round(fraction * ttmlText.length), ttmlText.length) }
+      }
+
+      // Leading chord (before first matched UG word) — map to start of TTML
+      if (ugWordIdx < firstMatchedUg) {
+        const firstTtml = ugToTtml[firstMatchedUg]
+        const ttmlLeadEnd = ttmlWords[firstTtml].start
+        if (ttmlLeadEnd > 0) {
+          const ugLeadEnd = ugWords[firstMatchedUg].start
+          const fraction = ugLeadEnd > 0 ? charPosition / ugLeadEnd : 0
+          return { chord, charIndex: Math.min(Math.round(fraction * ttmlLeadEnd), Math.max(ttmlLeadEnd - 1, 0)) }
+        }
+        return { chord, charIndex: 0 }
+      }
+
+      // Trailing chord (after last matched UG word) — map to end of TTML
+      if (ugWordIdx > lastMatchedUg) {
+        return { chord, charIndex: ttmlText.length }
+      }
 
       // Look up aligned TTML word
       let ttmlWordIdx = ugToTtml[ugWordIdx]
@@ -327,8 +353,20 @@ export function mapChordsToCharPositions(
       return { chord, charIndex }
     })
     .filter((item): item is ChordPosition => item !== null)
-    .filter(
-      (item, idx, arr) =>
-        arr.findIndex((x) => x.charIndex === item.charIndex) === idx,
-    )
+
+  // Spread out trailing chords so each gets a unique charIndex
+  let trailingOffset = 0
+  for (const c of mapped) {
+    if (c.charIndex >= ttmlText.length) {
+      c.charIndex = ttmlText.length + trailingOffset
+      trailingOffset++
+    }
+  }
+
+  // Dedup within the text range; trailing chords are already unique
+  return mapped.filter(
+    (item, idx, arr) =>
+      item.charIndex >= ttmlText.length ||
+      arr.findIndex((x) => x.charIndex === item.charIndex) === idx,
+  )
 }

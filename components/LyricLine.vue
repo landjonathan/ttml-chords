@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
           >
             {{ displayChord(tc.chord) }}
           </span>
-          <span class="word-text">​</span>
+          <span class="word-text">&nbsp;</span>
         </span>
       </span>
     </span>

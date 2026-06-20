@@ -147,18 +147,36 @@ const findRuns = (length: number, pred: (i: number) => boolean) => {
 }
 
 /**
+ * Capitalize a section type for display: 'intro' → 'Intro'.
+ */
+const sectionLabel = (section: string) =>
+  section.charAt(0).toUpperCase() + section.slice(1)
+
+/**
  * Match UG chord lines to TTML lyrics lines and assign chords as
  * character-level positions on each line.
  *
  * Phase 1: text-similarity matching (sequential greedy, 40% threshold)
  * Phase 2: section-type fallback (match unmatched runs to same-type UG sections)
  * Phase 3: structural fallback (match by line-count similarity when no sections)
+ * Phase 4: instrumental chord-only lines inserted into TTML timeline gaps
  */
 export function matchChordsToTtml(
   ttmlLines: LyricLine[],
   ugLines: UgChordLine[],
 ): LyricLine[] {
   if (ugLines.length === 0) return ttmlLines
+
+  // Separate lyric UG lines from chord-only (instrumental) UG lines
+  const lyricUgLines: (UgChordLine & { originalIndex: number })[] = []
+  const instrumentalUgLines: (UgChordLine & { originalIndex: number })[] = []
+  for (let u = 0; u < ugLines.length; u++) {
+    if (ugLines[u].lyrics.trim()) {
+      lyricUgLines.push({ ...ugLines[u], originalIndex: u })
+    } else {
+      instrumentalUgLines.push({ ...ugLines[u], originalIndex: u })
+    }
+  }
 
   // Track which TTML lines got matched and to which UG index
   const matched: (number | null)[] = new Array(ttmlLines.length).fill(null)
@@ -227,8 +245,8 @@ export function matchChordsToTtml(
               result[idx].chords.push(local)
             }
           } else if (isLast && c.charIndex >= offset + lineLen) {
-            // Trailing chords go to the last line in the group
-            const local = { chord: c.chord, charIndex: lineLen }
+            // Trailing chords go to the last line — preserve spread offset
+            const local = { chord: c.chord, charIndex: c.charIndex - offset }
             if (!result[idx].chords.some((e) => e.charIndex === local.charIndex)) {
               result[idx].chords.push(local)
             }
@@ -324,6 +342,90 @@ export function matchChordsToTtml(
         }
       }
     }
+  }
+
+  // ── Phase 4: instrumental (chord-only) lines ──
+  // Place chord-only UG lines into gaps in the TTML timeline.
+  if (instrumentalUgLines.length > 0) {
+    // Map each matched UG original index → TTML line index
+    const ugIdxToTtmlIdx = new Map<number, number>()
+    for (let t = 0; t < matched.length; t++) {
+      if (matched[t] !== null && matched[t]! >= 0) {
+        ugIdxToTtmlIdx.set(matched[t]!, t)
+      }
+    }
+
+    // Collect instrumental lines with their determined insertion position
+    const toInsert: { insertAfter: number; line: LyricLine }[] = []
+
+    for (const inst of instrumentalUgLines) {
+      // Find the nearest matched UG line before and after this instrumental line
+      let prevTtmlIdx = -1
+      let nextTtmlIdx = result.length
+      for (let u = inst.originalIndex - 1; u >= 0; u--) {
+        if (ugIdxToTtmlIdx.has(u)) { prevTtmlIdx = ugIdxToTtmlIdx.get(u)!; break }
+      }
+      for (let u = inst.originalIndex + 1; u < ugLines.length; u++) {
+        if (ugIdxToTtmlIdx.has(u)) { nextTtmlIdx = ugIdxToTtmlIdx.get(u)!; break }
+      }
+
+      // Determine timing from the gap between surrounding TTML lines
+      let gapBeginMs: number
+      let gapEndMs: number
+
+      if (prevTtmlIdx >= 0 && nextTtmlIdx < result.length) {
+        gapBeginMs = result[prevTtmlIdx].endMs
+        gapEndMs = result[nextTtmlIdx].beginMs
+      } else if (prevTtmlIdx >= 0) {
+        // After last lyric line — use a duration based on a nearby verse/chorus
+        gapBeginMs = result[prevTtmlIdx].endMs
+        const refDuration = result[prevTtmlIdx].endMs - result[prevTtmlIdx].beginMs
+        gapEndMs = gapBeginMs + refDuration
+      } else if (nextTtmlIdx < result.length) {
+        // Before first lyric line (intro)
+        gapEndMs = result[nextTtmlIdx].beginMs
+        const refDuration = result[nextTtmlIdx].endMs - result[nextTtmlIdx].beginMs
+        gapBeginMs = Math.max(0, gapEndMs - refDuration)
+      } else {
+        // No TTML lines at all — skip
+        continue
+      }
+
+      // Skip if the gap is too small (< 500ms)
+      if (gapEndMs - gapBeginMs < 500) continue
+
+      // Use original charPosition as charIndex to preserve whitespace-based
+      // proportional timing (wider gaps between chords = longer duration)
+      const chords: ChordPosition[] = inst.chords.map(({ chord, charPosition }) => ({
+        chord,
+        charIndex: charPosition,
+      }))
+
+      const instLine: LyricLine = {
+        index: 0, // will be reindexed
+        text: '',
+        beginMs: gapBeginMs,
+        endMs: gapEndMs,
+        words: [],
+        chords,
+        isBackground: false,
+        songPart: inst.section && inst.section !== 'other'
+          ? sectionLabel(inst.section)
+          : undefined,
+      }
+
+      toInsert.push({ insertAfter: prevTtmlIdx, line: instLine })
+    }
+
+    // Insert in reverse order to keep indices stable
+    toInsert
+      .sort((a, b) => b.insertAfter - a.insertAfter)
+      .forEach(({ insertAfter, line }) => {
+        result.splice(insertAfter + 1, 0, line)
+      })
+
+    // Reindex all lines
+    result.forEach((line, i) => { line.index = i })
   }
 
   return result

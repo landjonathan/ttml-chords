@@ -33,12 +33,15 @@ Chords are stored on `LyricLine.chords` as `ChordPosition[]` — each entry has 
 ## Chord matching pipeline
 `useChordParser.parseUgContent()` → `useChordMatcher.matchChordsToTtml()`
 
-`mapChordsToCharPositions(ttmlText, ugLyrics, ugChords)` maps UG character positions to TTML character positions via word alignment with proportional sub-word interpolation.
+`parseUgContent` keeps all chord lines, including chord-only lines (no associated lyrics) that represent instrumental sections (intros, solos, interludes, etc.). These are emitted as `UgChordLine` with `lyrics: ''`.
 
-Three phases in matcher:
+`mapChordsToCharPositions(ttmlText, ugLyrics, ugChords)` maps UG character positions to TTML character positions via word alignment with proportional sub-word interpolation. Leading chords (before the first matched UG word) are mapped proportionally to the start of the TTML text, or to `charIndex 0` if there's no leading TTML space. Trailing chords (after the last matched UG word, or in whitespace past the end of lyrics) are each given a unique `charIndex ≥ ttmlText.length` so multiple trailing chords are preserved (not collapsed to a single position).
+
+Four phases in matcher:
 1. **Text similarity** — sequential greedy, 40% word-overlap threshold, produces character-level positions via `mapChordsToCharPositions`
 2. **Section-type fallback** — for unmatched runs, infer section type from matched neighbors, apply chords proportionally (UG charPosition → TTML charIndex)
 3. **Structural fallback** — when no UG section headers exist, find matched run of similar line count, proportionally map chord charIndex from source to target line
+4. **Instrumental chord-only lines** — UG lines with empty lyrics (intros, solos, interludes) are placed into gaps in the TTML timeline as new `LyricLine` entries with `text: ''` and chords at sequential `charIndex` values (0, 1, 2, …). Timing is derived from the gap between surrounding matched TTML lines; if the instrumental section is before all lyrics, timing extends backward from the first line's `beginMs` using a reference duration; if after all lyrics, forward from the last line's `endMs`. Gaps smaller than 500ms are skipped. The section label (e.g. "Intro", "Solo") is set as `songPart` for display.
 
 ## Chord editing (LyricsDisplay)
 - Hover chord → pencil icon → click enters edit mode
@@ -75,7 +78,9 @@ Chord `<span>` timing encodes character position:
 - `beginMs = lineBegin + (charIndex / textLength) * duration`
 - `endMs = beginMs + duration / textLength`
 
-On parse, `charIndex = Math.round((spanBeginMs - lineBeginMs) / duration * textLength)`.
+For chord-only lines (empty text), `textLength` is `Math.max(chords.length, 1)` so chords are distributed evenly across the line duration. The parser uses the same rule when decoding.
+
+On parse, `charIndex = Math.round((spanBeginMs - lineBeginMs) / duration * textLength)`. Empty-text `<p>` elements are preserved (not filtered) so chord-only instrumental lines round-trip correctly.
 
 ## Maintaining these docs
 When making changes that affect architecture, data flow, component responsibilities, state management, or conventions described in this file or `README.md`, update the relevant docs in the same commit. This includes adding/removing/renaming files, changing event or prop interfaces, modifying the matching pipeline, or altering the TTML format.
